@@ -1,0 +1,10 @@
+{
+  "name": "Carte de Visite Digitale - Ange Elenga",
+  "description": "Carte de visite virtuelle professionnelle d'Ange Elenga (Kongo Digital Wave) avec partage QR Code, coordonnées de contact, liens et localisation GPS.",
+  "requestFramePermissions": [
+    "geolocation"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
