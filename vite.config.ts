@@ -4,14 +4,11 @@ import path from 'path';
 import {defineConfig} from 'vite';
 
 export default defineConfig(() => {
-  const publicUrl =
-    process.env.APP_URL ||
-    'https://ais-pre-5y2gapfmtmewltcvbvolpt-222488109584.europe-west1.run.app';
-
   return {
+    base: '/',
     plugins: [react(), tailwindcss()],
     define: {
-      'import.meta.env.VITE_APP_URL': JSON.stringify(publicUrl),
+      ...(process.env.APP_URL ? { 'import.meta.env.VITE_APP_URL': JSON.stringify(process.env.APP_URL) } : {}),
     },
     resolve: {
       alias: {

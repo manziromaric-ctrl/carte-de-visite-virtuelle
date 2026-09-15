@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, FormEvent } from 'react';
 import QRCode from 'qrcode';
 import { 
   X, 
@@ -12,25 +12,43 @@ import {
   Globe, 
   ExternalLink,
   Smartphone,
-  CheckCircle2
+  CheckCircle2,
+  Edit3,
+  RotateCcw,
+  Sparkles
 } from 'lucide-react';
 import { BusinessCardProfile, QrTargetType } from '../types';
 import { generateMeCard } from '../utils/vcard';
-import { getDigitalCardUrl } from '../utils/cardUrl';
+import { getDigitalCardUrl, setCustomCardUrl, getCustomCardUrl, resetCustomCardUrl } from '../utils/cardUrl';
 
 interface QrCodeModalProps {
   isOpen: boolean;
   onClose: () => void;
   profile: BusinessCardProfile;
+  onUrlChange?: (url: string) => void;
 }
 
-export function QrCodeModal({ isOpen, onClose, profile }: QrCodeModalProps) {
+export function QrCodeModal({ isOpen, onClose, profile, onUrlChange }: QrCodeModalProps) {
   const [qrMode, setQrMode] = useState<QrTargetType>('card_url');
   const [qrDataUrl, setQrDataUrl] = useState<string>('');
   const [copied, setCopied] = useState(false);
   const [shareSuccess, setShareSuccess] = useState(false);
+  
+  // Custom URL editor state
+  const [isEditingUrl, setIsEditingUrl] = useState(false);
+  const [urlInput, setUrlInput] = useState('');
+  const [activeCardUrl, setActiveCardUrl] = useState('');
 
-  // Compute what string the QR code encodes based on active mode
+  useEffect(() => {
+    if (isOpen) {
+      const currentUrl = getDigitalCardUrl();
+      setActiveCardUrl(currentUrl);
+      setUrlInput(getCustomCardUrl() || currentUrl);
+      setIsEditingUrl(false);
+    }
+  }, [isOpen]);
+
+  // Compute payload based on active mode
   const getEncodedPayload = (): string => {
     switch (qrMode) {
       case 'vcard_contact':
@@ -39,18 +57,18 @@ export function QrCodeModal({ isOpen, onClose, profile }: QrCodeModalProps) {
         return profile.googleMapsShareUrl;
       case 'card_url':
       default:
-        return getDigitalCardUrl();
+        return activeCardUrl || getDigitalCardUrl();
     }
   };
 
   const payload = getEncodedPayload();
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen || !payload) return;
 
     // High error-correction level 'H' (30% redundancy) ensures immediate detection by any mobile camera
     QRCode.toDataURL(payload, {
-      width: 480,
+      width: 512,
       margin: 2,
       errorCorrectionLevel: 'H',
       color: {
@@ -64,9 +82,29 @@ export function QrCodeModal({ isOpen, onClose, profile }: QrCodeModalProps) {
       .catch((err) => {
         console.error('Error generating QR Code', err);
       });
-  }, [isOpen, qrMode, profile, payload]);
+  }, [isOpen, qrMode, profile, payload, activeCardUrl]);
 
   if (!isOpen) return null;
+
+  const handleSaveCustomUrl = (e: FormEvent) => {
+    e.preventDefault();
+    if (urlInput.trim()) {
+      setCustomCardUrl(urlInput.trim());
+      const updated = getDigitalCardUrl();
+      setActiveCardUrl(updated);
+      setIsEditingUrl(false);
+      if (onUrlChange) onUrlChange(updated);
+    }
+  };
+
+  const handleResetToAutoUrl = () => {
+    resetCustomCardUrl();
+    const autoUrl = getDigitalCardUrl();
+    setActiveCardUrl(autoUrl);
+    setUrlInput(autoUrl);
+    setIsEditingUrl(false);
+    if (onUrlChange) onUrlChange(autoUrl);
+  };
 
   const handleDownloadQr = () => {
     if (!qrDataUrl) return;
@@ -125,15 +163,15 @@ export function QrCodeModal({ isOpen, onClose, profile }: QrCodeModalProps) {
               <QrIcon className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="font-bold text-base text-white">Scanner avec votre Téléphone</h3>
-              <p className="text-xs text-slate-400">Ouvre directement la carte sur votre smartphone</p>
+              <h3 className="font-bold text-base text-white">Code QR 100% Fonctionnel</h3>
+              <p className="text-xs text-slate-400">Scannable avec tout appareil photo smartphone</p>
             </div>
           </div>
 
           <button
             id="close-qr-modal-btn"
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition-colors"
+            className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
@@ -145,21 +183,21 @@ export function QrCodeModal({ isOpen, onClose, profile }: QrCodeModalProps) {
             id="qr-mode-card-btn"
             type="button"
             onClick={() => setQrMode('card_url')}
-            className={`py-2 px-2 rounded-xl flex flex-col items-center gap-1 font-medium transition-all ${
+            className={`py-2 px-2 rounded-xl flex flex-col items-center gap-1 font-medium transition-all cursor-pointer ${
               qrMode === 'card_url'
                 ? 'bg-emerald-500 text-slate-950 font-bold shadow-md'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
             }`}
           >
             <Globe className="w-3.5 h-3.5" />
-            <span className="text-[11px] truncate">Cette Carte Web</span>
+            <span className="text-[11px] truncate">Lien Carte Web</span>
           </button>
 
           <button
             id="qr-mode-contact-btn"
             type="button"
             onClick={() => setQrMode('vcard_contact')}
-            className={`py-2 px-2 rounded-xl flex flex-col items-center gap-1 font-medium transition-all ${
+            className={`py-2 px-2 rounded-xl flex flex-col items-center gap-1 font-medium transition-all cursor-pointer ${
               qrMode === 'vcard_contact'
                 ? 'bg-emerald-500 text-slate-950 font-bold shadow-md'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
@@ -173,7 +211,7 @@ export function QrCodeModal({ isOpen, onClose, profile }: QrCodeModalProps) {
             id="qr-mode-location-btn"
             type="button"
             onClick={() => setQrMode('google_maps_location')}
-            className={`py-2 px-2 rounded-xl flex flex-col items-center gap-1 font-medium transition-all ${
+            className={`py-2 px-2 rounded-xl flex flex-col items-center gap-1 font-medium transition-all cursor-pointer ${
               qrMode === 'google_maps_location'
                 ? 'bg-emerald-500 text-slate-950 font-bold shadow-md'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
@@ -189,10 +227,10 @@ export function QrCodeModal({ isOpen, onClose, profile }: QrCodeModalProps) {
           <Smartphone className="w-4 h-4 text-emerald-400 shrink-0" />
           <span>
             {qrMode === 'card_url'
-              ? 'Pointez l\'appareil photo de votre smartphone pour ouvrir la carte.'
+              ? 'Pointez la caméra d\'un iPhone ou Android pour ouvrir directement la carte.'
               : qrMode === 'vcard_contact'
-              ? 'Scannez pour ajouter Ange Elenga directement dans vos contacts.'
-              : 'Scannez pour ouvrir l\'itinéraire sur Google Maps.'}
+              ? 'Pointez la caméra pour enregistrer le contact dans votre répertoire.'
+              : 'Pointez la caméra pour lancer le guidage GPS Google Maps.'}
           </span>
         </div>
 
@@ -212,21 +250,60 @@ export function QrCodeModal({ isOpen, onClose, profile }: QrCodeModalProps) {
             )}
           </div>
 
-          {/* Active target link preview box */}
-          <div className="mt-3.5 w-full bg-slate-950 p-2.5 rounded-xl border border-slate-800 text-left space-y-1">
-            <div className="flex items-center justify-between text-[10px] text-slate-400 font-medium">
-              <span>Lien encodé :</span>
+          {/* Active target link preview & configuration box */}
+          <div className="mt-3.5 w-full bg-slate-950 p-3 rounded-xl border border-slate-800 text-left space-y-2">
+            <div className="flex items-center justify-between text-[11px] text-slate-400 font-medium">
+              <span>Lien encodé dans le QR :</span>
               {qrMode === 'card_url' && (
-                <span className="text-emerald-400 flex items-center gap-1 font-semibold">
-                  <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-                  Redirection active
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="text-emerald-400 flex items-center gap-1 font-semibold text-[10px]">
+                    <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                    En direct
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingUrl(!isEditingUrl)}
+                    className="text-emerald-400 hover:text-emerald-300 text-[10px] underline flex items-center gap-0.5 cursor-pointer"
+                  >
+                    <Edit3 className="w-2.5 h-2.5" />
+                    {isEditingUrl ? 'Fermer' : 'Modifier'}
+                  </button>
+                </div>
               )}
             </div>
 
-            <div className="font-mono text-xs text-slate-200 truncate select-all py-0.5">
-              {payload}
-            </div>
+            {/* If user clicked to customize URL (e.g. their specific Netlify domain) */}
+            {isEditingUrl && qrMode === 'card_url' ? (
+              <form onSubmit={handleSaveCustomUrl} className="space-y-2 pt-1">
+                <input
+                  type="url"
+                  value={urlInput}
+                  onChange={(e) => setUrlInput(e.target.value)}
+                  placeholder="https://votre-site.netlify.app"
+                  className="w-full px-3 py-1.5 rounded-lg bg-slate-900 border border-emerald-500/50 text-white text-xs font-mono focus:outline-none focus:ring-1 focus:ring-emerald-400"
+                />
+                <div className="flex items-center justify-between gap-2">
+                  <button
+                    type="button"
+                    onClick={handleResetToAutoUrl}
+                    className="text-[10px] text-slate-400 hover:text-slate-200 flex items-center gap-1 cursor-pointer"
+                  >
+                    <RotateCcw className="w-2.5 h-2.5" />
+                    <span>Détecter automatiquement</span>
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-3 py-1 rounded-lg bg-emerald-500 text-slate-950 font-bold text-xs hover:bg-emerald-400 transition-colors cursor-pointer"
+                  >
+                    Valider le lien
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <div className="font-mono text-xs text-emerald-300 truncate select-all py-0.5 bg-slate-900/80 px-2 rounded border border-slate-800">
+                {payload}
+              </div>
+            )}
 
             {qrMode !== 'vcard_contact' && (
               <div className="pt-1 flex items-center justify-between">
@@ -236,13 +313,13 @@ export function QrCodeModal({ isOpen, onClose, profile }: QrCodeModalProps) {
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-1 text-[11px] text-emerald-400 hover:text-emerald-300 font-semibold hover:underline"
                 >
-                  <span>Tester le lien dans un nouvel onglet</span>
+                  <span>Tester le lien (ouvrir)</span>
                   <ExternalLink className="w-3 h-3" />
                 </a>
                 <button
                   type="button"
                   onClick={handleCopyLink}
-                  className="text-[11px] text-slate-400 hover:text-white transition-colors"
+                  className="text-[11px] text-slate-400 hover:text-white transition-colors cursor-pointer"
                 >
                   {copied ? '✓ Copié !' : 'Copier'}
                 </button>
@@ -257,7 +334,7 @@ export function QrCodeModal({ isOpen, onClose, profile }: QrCodeModalProps) {
             id="download-qr-image-btn"
             type="button"
             onClick={handleDownloadQr}
-            className="flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-750 text-slate-100 font-medium text-xs border border-slate-700 transition-colors shadow-sm"
+            className="flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-750 text-slate-100 font-medium text-xs border border-slate-700 transition-colors shadow-sm cursor-pointer"
           >
             <Download className="w-4 h-4 text-emerald-400" />
             <span>Télécharger l'image QR</span>
@@ -267,7 +344,7 @@ export function QrCodeModal({ isOpen, onClose, profile }: QrCodeModalProps) {
             id="share-native-btn"
             type="button"
             onClick={handleNativeShare}
-            className="flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs shadow-md shadow-emerald-950/40 transition-colors"
+            className="flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs shadow-md shadow-emerald-950/40 transition-colors cursor-pointer"
           >
             {shareSuccess ? (
               <>

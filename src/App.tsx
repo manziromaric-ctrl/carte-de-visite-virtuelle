@@ -59,6 +59,7 @@ export default function App() {
   const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const [activeTab, setActiveTab] = useState<'all' | 'links' | 'gps' | 'about'>('all');
+  const [cardUrlVersion, setCardUrlVersion] = useState(0);
 
   // View counter state with localStorage anti-double-counting
   const [viewCount, setViewCount] = useState<number>(() => {
@@ -212,12 +213,14 @@ export default function App() {
             </div>
           </div>
 
-          <PhysicalCardPreview
-            profile={profile}
-            onOpenQr={() => setIsQrModalOpen(true)}
-            onOpenPhoto={() => setIsPhotoModalOpen(true)}
-            viewCount={viewCount}
-          />
+          <div key={cardUrlVersion}>
+            <PhysicalCardPreview
+              profile={profile}
+              onOpenQr={() => setIsQrModalOpen(true)}
+              onOpenPhoto={() => setIsPhotoModalOpen(true)}
+              viewCount={viewCount}
+            />
+          </div>
         </section>
 
         {/* ================= PRIMARY ACTION BUTTONS ================= */}
@@ -318,6 +321,7 @@ export default function App() {
         isOpen={isQrModalOpen}
         onClose={() => setIsQrModalOpen(false)}
         profile={profile}
+        onUrlChange={() => setCardUrlVersion((v) => v + 1)}
       />
 
       <EditProfileModal
