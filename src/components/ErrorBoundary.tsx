@@ -41,7 +41,7 @@ export class ErrorBoundary extends Component<Props, State> {
         <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-4">
           <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 text-center space-y-5 shadow-2xl">
             <div className="flex justify-center">
-              <KongoLogo variant="full" size="md" />
+              <KongoLogo variant="badge" size="md" />
             </div>
 
             <div className="w-14 h-14 mx-auto rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400">

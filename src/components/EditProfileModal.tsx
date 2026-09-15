@@ -23,7 +23,34 @@ export function EditProfileModal({
   const [imageError, setImageError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const [isLogoDragging, setIsLogoDragging] = useState(false);
+  const [logoError, setLogoError] = useState<string | null>(null);
+  const logoInputRef = useRef<HTMLInputElement>(null);
+
   if (!isOpen) return null;
+
+  const handleLogoFileChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      processLogoFile(file);
+    }
+  };
+
+  const processLogoFile = (file: File) => {
+    setLogoError(null);
+    if (!file.type.startsWith('image/')) {
+      setLogoError('Veuillez sélectionner un fichier image valide (PNG, JPG, SVG, WebP).');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const dataUrl = e.target?.result as string;
+      if (dataUrl) {
+        setFormData((prev) => ({ ...prev, logoUrl: dataUrl, emblemUrl: dataUrl }));
+      }
+    };
+    reader.readAsDataURL(file);
+  };
 
   const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -186,6 +213,114 @@ export function EditProfileModal({
                   <div className="flex items-center gap-1.5 text-rose-400 text-[11px] bg-rose-500/10 p-2 rounded-lg border border-rose-500/20">
                     <AlertCircle className="w-3.5 h-3.5 shrink-0" />
                     <span>{imageError}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Logo Officiel Kongo Digital Wave Section */}
+          <div className="p-3.5 sm:p-4 rounded-2xl bg-slate-950/70 border border-emerald-500/20 space-y-3">
+            <div className="flex items-center justify-between">
+              <label className="block text-slate-200 font-semibold flex items-center gap-1.5">
+                <KongoLogo variant="emblem" size="xs" />
+                <span>Logo officiel de l'entreprise</span>
+              </label>
+              <button
+                type="button"
+                onClick={() =>
+                  setFormData({
+                    ...formData,
+                    logoUrl: '/kongo_digital_logo.png',
+                    emblemUrl: '/kongo_emblem.png',
+                  })
+                }
+                className="text-emerald-400 hover:text-emerald-300 flex items-center gap-1 text-[11px] transition-colors"
+                title="Rétablir le logo officiel original Kongo Digital Wave"
+              >
+                <RotateCcw className="w-3 h-3" />
+                <span>Rétablir le logo officiel</span>
+              </button>
+            </div>
+
+            <div className="flex flex-col sm:flex-row items-center gap-4">
+              {/* Logo Preview */}
+              <div className="relative shrink-0">
+                <div className="h-20 w-32 rounded-2xl overflow-hidden border-2 border-emerald-400/80 bg-white shadow-md flex items-center justify-center p-2">
+                  <img
+                    src={formData.logoUrl || '/kongo_digital_logo.png'}
+                    alt="Aperçu logo"
+                    referrerPolicy="no-referrer"
+                    className="max-h-full max-w-full object-contain"
+                  />
+                </div>
+              </div>
+
+              {/* Upload Dropzone & URL Input for Logo */}
+              <div className="flex-1 w-full space-y-2">
+                <div>
+                  <label className="block text-slate-400 text-[11px] mb-1">
+                    URL directe du logo (PNG avec fond transparent recommandé)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="/kongo_digital_logo.png ou https://..."
+                    value={formData.logoUrl || ''}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        logoUrl: e.target.value,
+                        emblemUrl: e.target.value,
+                      })
+                    }
+                    className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-100 placeholder-slate-600 focus:outline-none focus:border-emerald-500 text-xs"
+                  />
+                </div>
+
+                <div
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setIsLogoDragging(true);
+                  }}
+                  onDragLeave={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setIsLogoDragging(false);
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setIsLogoDragging(false);
+                    const file = e.dataTransfer.files?.[0];
+                    if (file) {
+                      processLogoFile(file);
+                    }
+                  }}
+                  onClick={() => logoInputRef.current?.click()}
+                  className={`border border-dashed rounded-xl p-2.5 text-center cursor-pointer transition-colors flex items-center justify-center gap-2 ${
+                    isLogoDragging
+                      ? 'border-emerald-400 bg-emerald-500/10'
+                      : 'border-slate-800 hover:border-slate-700 bg-slate-900/50 hover:bg-slate-900'
+                  }`}
+                >
+                  <input
+                    ref={logoInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleLogoFileChange}
+                    className="hidden"
+                  />
+                  <Upload className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                  <span className="text-[11px] text-slate-300">
+                    Glisser le logo PNG ici ou <span className="text-emerald-400 underline font-medium">parcourir</span>
+                  </span>
+                </div>
+
+                {logoError && (
+                  <div className="flex items-center gap-1.5 text-rose-400 text-[11px] bg-rose-500/10 p-2 rounded-lg border border-rose-500/20">
+                    <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                    <span>{logoError}</span>
                   </div>
                 )}
               </div>

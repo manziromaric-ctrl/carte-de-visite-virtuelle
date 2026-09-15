@@ -56,7 +56,7 @@ export function AboutSection({ profile, onOpenPhoto }: AboutSectionProps) {
 
               {/* Official Brand Logo */}
               <div className="self-center sm:self-start pt-1 sm:pt-0">
-                <KongoLogo variant="full" size="sm" showTagline={false} />
+                <KongoLogo variant="badge" size="sm" src={profile.logoUrl} />
               </div>
             </div>
 

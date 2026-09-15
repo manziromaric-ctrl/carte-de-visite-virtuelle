@@ -134,7 +134,7 @@ export default function App() {
         {/* Top Header / Bar */}
         <header className="flex items-center justify-between py-2 border-b border-slate-900 pb-4">
           <div className="flex items-center gap-3">
-            <KongoLogo variant="emblem" size="md" />
+            <KongoLogo variant="emblem" size="md" src={profile.emblemUrl} />
             <div>
               <div className="text-xs sm:text-sm font-extrabold text-white tracking-wide uppercase">
                 {profile.company}
@@ -301,7 +301,7 @@ export default function App() {
         {/* Quick NFC / Direct Access Footer info */}
         <footer className="pt-6 border-t border-slate-900 text-center space-y-3">
           <div className="flex justify-center">
-            <KongoLogo variant="full" size="md" />
+            <KongoLogo variant="badge" size="md" src={profile.logoUrl} />
           </div>
           <div className="flex items-center justify-center gap-1.5 text-xs text-slate-400">
             <ShieldCheck className="w-4 h-4 text-emerald-400" />

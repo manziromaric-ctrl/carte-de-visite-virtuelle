@@ -54,7 +54,7 @@ export function PhysicalCardPreview({ profile, onOpenQr, onOpenPhoto, viewCount 
           {/* Top Row: Company Logo & NFC Icon */}
           <div className="relative z-10 flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <KongoLogo variant="emblem" size="sm" />
+              <KongoLogo variant="emblem" size="sm" src={profile.emblemUrl} />
               <div>
                 <span className="font-extrabold text-xs sm:text-sm tracking-wide text-white uppercase font-sans">
                   {profile.company}
@@ -161,7 +161,7 @@ export function PhysicalCardPreview({ profile, onOpenQr, onOpenPhoto, viewCount 
           {/* Top row */}
           <div className="flex items-center justify-between relative z-10">
             <div className="flex items-center gap-2">
-              <KongoLogo variant="emblem" size="xs" />
+              <KongoLogo variant="emblem" size="xs" src={profile.emblemUrl} />
               <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1.5">
                 <QrCode className="w-3.5 h-3.5" />
                 Scan Instantané

@@ -8,6 +8,8 @@ export const DEFAULT_PROFILE: BusinessCardProfile = {
   tagline: 'Création de contenus stratégiques, audiovisuels & solutions digitales d\'impact',
   bio: 'Passionnée par l\'innovation technologique et la communication de marque en Afrique centrale. Nous accompagnons les entreprises, institutions et porteurs de projets dans leur visibilité et leur croissance numérique.',
   avatarUrl: defaultAvatar,
+  logoUrl: '/kongo_digital_logo.png',
+  emblemUrl: '/kongo_emblem.png',
   email: 'congodigitalwave@gmail.com',
   phone: '+242 05 377 06 06',
   whatsapp: '+242053770606',

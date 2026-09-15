@@ -15,6 +15,8 @@ export interface BusinessCardProfile {
   tagline: string;
   bio: string;
   avatarUrl?: string;
+  logoUrl?: string;
+  emblemUrl?: string;
   email: string;
   phone: string;
   whatsapp: string;
