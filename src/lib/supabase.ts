@@ -73,3 +73,6 @@ export function getSupabaseClient(): SupabaseClient | null {
 export function resetSupabaseClient(): void {
   supabaseInstance = null;
 }
+
+export { runSupabasePermissionsTest, SUPABASE_FIX_SQL } from '../utils/supabaseTester';
+export type { SupabaseTestReport, SupabaseTestStep } from '../utils/supabaseTester';

@@ -1,52 +1,13 @@
 import { useState, useEffect } from 'react';
-import { Database, Radio, CheckCircle, AlertCircle, RefreshCw, Key, Globe, Copy, Check, ExternalLink, HelpCircle, Code } from 'lucide-react';
-import { getSavedSupabaseConfig, saveSupabaseConfig, getSupabaseClient, resetSupabaseClient } from '../lib/supabase';
+import { Database, Radio, CheckCircle, AlertCircle, RefreshCw, Key, Globe, Copy, Check, ExternalLink, HelpCircle, Code, Zap, ShieldCheck, CheckCircle2, Clock, Terminal, AlertTriangle, Play } from 'lucide-react';
+import { getSavedSupabaseConfig, saveSupabaseConfig, getSupabaseClient, resetSupabaseClient, runSupabasePermissionsTest, SUPABASE_FIX_SQL, SupabaseTestReport, SupabaseTestStep } from '../lib/supabase';
 import { CloudSyncStatus } from '../services/cloudSync';
 
 interface CloudSyncSettingsProps {
   syncStatus?: CloudSyncStatus;
 }
 
-const SUPABASE_SQL_SNIPPET = `-- 1. Création de la table pour la carte de visite
-CREATE TABLE IF NOT EXISTS public.digital_cards (
-  id TEXT PRIMARY KEY,
-  profile_data JSONB NOT NULL,
-  updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
-);
-
--- 2. Activation de la lecture et écriture publiques (pour la synchronisation)
-ALTER TABLE public.digital_cards ENABLE ROW LEVEL SECURITY;
-
-DROP POLICY IF EXISTS "Lecture publique pour tous les visiteurs" ON public.digital_cards;
-CREATE POLICY "Lecture publique pour tous les visiteurs" 
-ON public.digital_cards FOR SELECT USING (true);
-
-DROP POLICY IF EXISTS "Mise à jour autorisée" ON public.digital_cards;
-CREATE POLICY "Mise à jour autorisée" 
-ON public.digital_cards FOR ALL USING (true);
-
--- 3. Activation de la diffusion temps réel (Realtime)
-ALTER PUBLICATION supabase_realtime ADD TABLE public.digital_cards;
-
--- 4. Bucket de stockage 'videos' pour la synchronisation vidéo smartphone
-INSERT INTO storage.buckets (id, name, public) 
-VALUES ('videos', 'videos', true)
-ON CONFLICT (id) DO UPDATE SET public = true;
-
-DROP POLICY IF EXISTS "Public Videos Read" ON storage.objects;
-CREATE POLICY "Public Videos Read" 
-ON storage.objects FOR SELECT 
-USING (bucket_id = 'videos');
-
-DROP POLICY IF EXISTS "Public Videos Upload" ON storage.objects;
-CREATE POLICY "Public Videos Upload" 
-ON storage.objects FOR INSERT 
-WITH CHECK (bucket_id = 'videos');
-
-DROP POLICY IF EXISTS "Public Videos Update" ON storage.objects;
-CREATE POLICY "Public Videos Update" 
-ON storage.objects FOR UPDATE 
-WITH CHECK (bucket_id = 'videos');`;
+const SUPABASE_SQL_SNIPPET = SUPABASE_FIX_SQL;
 
 export function CloudSyncSettings({ syncStatus }: CloudSyncSettingsProps) {
   const [isOpen, setIsOpen] = useState(false);
@@ -58,6 +19,13 @@ export function CloudSyncSettings({ syncStatus }: CloudSyncSettingsProps) {
   const [testResult, setTestResult] = useState<{ status: 'idle' | 'testing' | 'success' | 'error'; message?: string }>({
     status: 'idle',
   });
+
+  // Dedicated read/write permissions test state
+  const [isTestingPermissions, setIsTestingPermissions] = useState(false);
+  const [permissionsReport, setPermissionsReport] = useState<SupabaseTestReport | null>(null);
+  const [liveTestSteps, setLiveTestSteps] = useState<SupabaseTestStep[]>([]);
+  const [showPermissionsPanel, setShowPermissionsPanel] = useState(false);
+  const [copiedFixSql, setCopiedFixSql] = useState(false);
 
   useEffect(() => {
     const cfg = getSavedSupabaseConfig();
@@ -118,38 +86,85 @@ export function CloudSyncSettings({ syncStatus }: CloudSyncSettingsProps) {
       });
       resetSupabaseClient();
 
-      const client = getSupabaseClient();
-      if (!client) {
+      // Automatically run complete read & write test
+      setIsTestingPermissions(true);
+      setShowPermissionsPanel(true);
+      setLiveTestSteps([]);
+
+      const report = await runSupabasePermissionsTest(
+        { url: cleanUrl, anonKey: cleanKey, tableName: tableName.trim() || 'digital_cards' },
+        (steps) => setLiveTestSteps(steps)
+      );
+
+      setPermissionsReport(report);
+
+      if (report.overallSuccess) {
+        setTestResult({
+          status: 'success',
+          message: 'Permissions validées ! Lecture, écriture et diffusion en temps réel 100% opérationnelles.',
+        });
+      } else {
         setTestResult({
           status: 'error',
-          message: 'Échec d\'initialisation du client Supabase avec ces identifiants.',
+          message: report.error || 'Permissions insuffisantes. Consultez le rapport de diagnostic ci-dessous.',
         });
-        return;
       }
-
-      // Test reaching Supabase API
-      const { error } = await client.from(tableName.trim() || 'digital_cards').select('id').limit(1);
-
-      if (error && error.code !== 'PGRST116' && !error.message?.includes('relation') && !error.message?.includes('does not exist')) {
-        // Real API or auth error
-        if (error.message?.includes('JWT') || error.message?.includes('apikey') || error.code === '401') {
-          setTestResult({
-            status: 'error',
-            message: `Erreur d'authentification : La clé "anon" n'est pas reconnue pour ce projet Supabase.`,
-          });
-          return;
-        }
-      }
-
-      setTestResult({
-        status: 'success',
-        message: 'Connexion Supabase réussie ! Double synchronisation et broadcast en direct actifs.',
-      });
     } catch (e: any) {
       setTestResult({
         status: 'error',
         message: `Erreur réseau ou identifiant invalide : ${e?.message || 'Vérifiez l\'URL et la clé anonyme.'}`,
       });
+    } finally {
+      setIsTestingPermissions(false);
+    }
+  };
+
+  const handleRunDetailedPermissionsTest = async () => {
+    setIsTestingPermissions(true);
+    setShowPermissionsPanel(true);
+    setPermissionsReport(null);
+    setLiveTestSteps([]);
+
+    const cleanUrl = supabaseUrl.trim().replace(/\/+$/, '');
+    const cleanKey = supabaseKey.trim();
+    const cleanTable = tableName.trim() || 'digital_cards';
+
+    try {
+      const report = await runSupabasePermissionsTest(
+        { url: cleanUrl, anonKey: cleanKey, tableName: cleanTable },
+        (steps) => setLiveTestSteps(steps)
+      );
+      setPermissionsReport(report);
+      if (report.overallSuccess) {
+        setTestResult({
+          status: 'success',
+          message: 'Permissions validées ! Lecture, écriture et diffusion en direct prêtes.',
+        });
+      } else {
+        setTestResult({
+          status: 'error',
+          message: report.error || 'Permissions insuffisantes. Voir détails ci-dessous.',
+        });
+      }
+    } catch (err: any) {
+      setTestResult({
+        status: 'error',
+        message: `Erreur inattendue : ${err?.message || 'Échec du test.'}`,
+      });
+    } finally {
+      setIsTestingPermissions(false);
+    }
+  };
+
+  const handleCopyFixSql = async () => {
+    if (permissionsReport?.suggestedSql) {
+      try {
+        await navigator.clipboard.writeText(permissionsReport.suggestedSql);
+        setCopiedFixSql(true);
+        setTimeout(() => setCopiedFixSql(false), 2500);
+      } catch {
+        // ignore
+      }
     }
   };
 
@@ -267,26 +282,44 @@ export function CloudSyncSettings({ syncStatus }: CloudSyncSettingsProps) {
               )}
             </div>
 
-            <div className="flex items-center justify-between pt-1">
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-800/80">
               <span className="text-[10px] text-slate-500">
                 Laisser vide pour continuer avec Firebase Firestore.
               </span>
-              <button
-                type="button"
-                onClick={handleSaveAndTest}
-                disabled={testResult.status === 'testing'}
-                className="px-3.5 py-1.5 rounded-lg bg-teal-600 hover:bg-teal-500 text-white font-semibold flex items-center gap-1.5 transition-colors shadow-sm"
-              >
-                {testResult.status === 'testing' ? (
-                  <RefreshCw className="w-3 h-3 animate-spin" />
-                ) : (
-                  <CheckCircle className="w-3 h-3" />
-                )}
-                <span>Tester & Enregistrer</span>
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleRunDetailedPermissionsTest}
+                  disabled={isTestingPermissions || !supabaseUrl.trim() || !supabaseKey.trim()}
+                  className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-teal-300 font-medium text-[11px] flex items-center gap-1.5 transition-colors border border-teal-500/20 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                  title="Exécute un test complet : SELECT, INSERT, VERIFY, DELETE et Realtime"
+                >
+                  {isTestingPermissions ? (
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin text-teal-400" />
+                  ) : (
+                    <Zap className="w-3.5 h-3.5 text-teal-400" />
+                  )}
+                  <span>Test Permissions R/W</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleSaveAndTest}
+                  disabled={isTestingPermissions}
+                  className="px-3.5 py-1.5 rounded-lg bg-teal-600 hover:bg-teal-500 text-white font-semibold text-[11px] flex items-center gap-1.5 transition-colors shadow-sm disabled:opacity-50"
+                >
+                  {isTestingPermissions ? (
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <CheckCircle className="w-3.5 h-3.5" />
+                  )}
+                  <span>Tester & Enregistrer</span>
+                </button>
+              </div>
             </div>
 
-            {testResult.status !== 'idle' && (
+            {/* General status alert banner */}
+            {testResult.status !== 'idle' && !showPermissionsPanel && (
               <div
                 className={`p-2.5 rounded-lg flex items-center gap-2 text-[10px] ${
                   testResult.status === 'success'
@@ -304,6 +337,142 @@ export function CloudSyncSettings({ syncStatus }: CloudSyncSettingsProps) {
                   <RefreshCw className="w-3.5 h-3.5 text-slate-400 animate-spin shrink-0" />
                 )}
                 <span>{testResult.message}</span>
+              </div>
+            )}
+
+            {/* Live Read/Write Permissions Test Report Panel */}
+            {showPermissionsPanel && (
+              <div className="mt-3 p-3 rounded-xl bg-slate-950 border border-teal-500/30 space-y-3 animate-in fade-in">
+                {/* Header & Quick Badges */}
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-2.5">
+                  <div className="flex items-center gap-1.5">
+                    <ShieldCheck className="w-4 h-4 text-teal-400" />
+                    <span className="font-semibold text-white text-xs">Rapport Permissions & Temps Réel</span>
+                  </div>
+                  {permissionsReport && (
+                    <span className="text-[10px] text-slate-400 flex items-center gap-1">
+                      <Clock className="w-3 h-3 text-slate-500" />
+                      <span>Testé à {permissionsReport.testedAt}</span>
+                    </span>
+                  )}
+                </div>
+
+                {/* Status Badges Matrix */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  <div className="p-2 rounded-lg bg-slate-900 border border-slate-800 flex flex-col gap-0.5">
+                    <span className="text-[9px] uppercase tracking-wider text-slate-500 font-semibold">Lecture (SELECT)</span>
+                    <span className={`text-[11px] font-bold flex items-center gap-1 ${
+                      permissionsReport?.canRead ? 'text-emerald-400' : isTestingPermissions ? 'text-slate-400' : 'text-rose-400'
+                    }`}>
+                      {permissionsReport?.canRead ? '✓ Autorisée' : isTestingPermissions ? 'Vérification...' : '✗ Bloquée'}
+                    </span>
+                  </div>
+
+                  <div className="p-2 rounded-lg bg-slate-900 border border-slate-800 flex flex-col gap-0.5">
+                    <span className="text-[9px] uppercase tracking-wider text-slate-500 font-semibold">Écriture (UPSERT)</span>
+                    <span className={`text-[11px] font-bold flex items-center gap-1 ${
+                      permissionsReport?.canWrite ? 'text-emerald-400' : isTestingPermissions ? 'text-slate-400' : 'text-rose-400'
+                    }`}>
+                      {permissionsReport?.canWrite ? '✓ Autorisée' : isTestingPermissions ? 'Vérification...' : '✗ Bloquée'}
+                    </span>
+                  </div>
+
+                  <div className="p-2 rounded-lg bg-slate-900 border border-slate-800 flex flex-col gap-0.5">
+                    <span className="text-[9px] uppercase tracking-wider text-slate-500 font-semibold">Nettoyage (DELETE)</span>
+                    <span className={`text-[11px] font-bold flex items-center gap-1 ${
+                      permissionsReport?.canDelete ? 'text-emerald-400' : isTestingPermissions ? 'text-slate-400' : 'text-amber-400'
+                    }`}>
+                      {permissionsReport?.canDelete ? '✓ Propre' : isTestingPermissions ? 'En cours...' : 'Non testé'}
+                    </span>
+                  </div>
+
+                  <div className="p-2 rounded-lg bg-slate-900 border border-slate-800 flex flex-col gap-0.5">
+                    <span className="text-[9px] uppercase tracking-wider text-slate-500 font-semibold">Temps Réel (Channel)</span>
+                    <span className={`text-[11px] font-bold flex items-center gap-1 ${
+                      permissionsReport?.realtimeReady ? 'text-emerald-400' : isTestingPermissions ? 'text-slate-400' : 'text-amber-400'
+                    }`}>
+                      {permissionsReport?.realtimeReady ? '✓ Connecté' : isTestingPermissions ? 'Connexion...' : 'En attente'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Steps List */}
+                <div className="space-y-1.5 pt-1">
+                  {(liveTestSteps.length > 0 ? liveTestSteps : permissionsReport?.steps || []).map((step) => (
+                    <div
+                      key={step.id}
+                      className="p-2 rounded-lg bg-slate-900/60 border border-slate-800/80 flex items-center justify-between gap-2 text-[10px]"
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        {step.status === 'running' && <RefreshCw className="w-3.5 h-3.5 text-teal-400 animate-spin shrink-0" />}
+                        {step.status === 'success' && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />}
+                        {step.status === 'warning' && <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" />}
+                        {step.status === 'error' && <AlertCircle className="w-3.5 h-3.5 text-rose-400 shrink-0" />}
+                        {step.status === 'pending' && <div className="w-3.5 h-3.5 rounded-full border border-slate-700 shrink-0" />}
+
+                        <div className="truncate">
+                          <span className="font-medium text-slate-200 block truncate">{step.name}</span>
+                          {step.details && (
+                            <span className="text-[9px] text-slate-400 truncate block">{step.details}</span>
+                          )}
+                        </div>
+                      </div>
+
+                      {step.durationMs !== undefined && (
+                        <span className="text-[9px] text-slate-500 font-mono shrink-0">
+                          {step.durationMs} ms
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Error Diagnostic & One-Click Fix */}
+                {permissionsReport && !permissionsReport.overallSuccess && (
+                  <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 space-y-2 text-rose-200 text-xs">
+                    <div className="flex items-start gap-2">
+                      <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                      <div className="space-y-1">
+                        <p className="font-semibold text-rose-300">Problème de configuration détecté</p>
+                        <p className="text-[11px] text-rose-200/90 leading-relaxed">
+                          {permissionsReport.error || 'Les requêtes de lecture ou d\'écriture ont été rejetées.'}
+                        </p>
+                        {permissionsReport.suggestedFix && (
+                          <p className="text-[10px] text-amber-300 font-medium">
+                            Solution : {permissionsReport.suggestedFix}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    {permissionsReport.suggestedSql && (
+                      <div className="pt-2 border-t border-rose-500/20 space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] text-slate-300 font-semibold">Script SQL correctif (à exécuter dans Supabase) :</span>
+                          <button
+                            type="button"
+                            onClick={handleCopyFixSql}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-teal-300 text-[10px] font-medium transition-colors"
+                          >
+                            {copiedFixSql ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                            <span>{copiedFixSql ? 'SQL copié !' : 'Copier le SQL'}</span>
+                          </button>
+                        </div>
+                        <pre className="p-2 rounded bg-slate-950 border border-slate-800 font-mono text-[9px] text-slate-300 overflow-x-auto leading-relaxed max-h-36">
+                          {permissionsReport.suggestedSql}
+                        </pre>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Success Banner */}
+                {permissionsReport && permissionsReport.overallSuccess && (
+                  <div className="p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center gap-2 text-emerald-300 text-[11px]">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span>Toutes les permissions de lecture, écriture et diffusion en temps réel sont validées avec succès !</span>
+                  </div>
+                )}
               </div>
             )}
           </div>
