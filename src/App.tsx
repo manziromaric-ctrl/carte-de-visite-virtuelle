@@ -10,10 +10,11 @@ import {
   Globe, 
   Linkedin, 
   Compass, 
-  ArrowUpRight,
-  ShieldCheck,
-  Send,
-  Eye
+  ArrowUpRight, 
+  ShieldCheck, 
+  Send, 
+  Eye,
+  Lock
 } from 'lucide-react';
 import { BusinessCardProfile } from './types';
 import { DEFAULT_PROFILE } from './data/defaultProfile';
@@ -24,6 +25,7 @@ import { GpsLocationSection } from './components/GpsLocationSection';
 import { AboutSection } from './components/AboutSection';
 import { QrCodeModal } from './components/QrCodeModal';
 import { EditProfileModal } from './components/EditProfileModal';
+import { PasswordModal } from './components/PasswordModal';
 import { PhotoModal } from './components/PhotoModal';
 import { KongoLogo } from './components/KongoLogo';
 import { downloadVCard } from './utils/vcard';
@@ -56,6 +58,17 @@ export default function App() {
 
   const [isQrModalOpen, setIsQrModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
+  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        return sessionStorage.getItem('kongo_admin_authenticated') === 'true';
+      } catch {
+        return false;
+      }
+    }
+    return false;
+  });
   const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const [activeTab, setActiveTab] = useState<'all' | 'links' | 'gps' | 'about'>('all');
@@ -113,6 +126,35 @@ export default function App() {
   const handleResetProfile = () => {
     setProfile(DEFAULT_PROFILE);
     localStorage.removeItem(STORAGE_KEY);
+  };
+
+  const handleOpenEdit = () => {
+    if (isAdminAuthenticated) {
+      setIsEditModalOpen(true);
+    } else {
+      setIsPasswordModalOpen(true);
+    }
+  };
+
+  const handlePasswordSuccess = () => {
+    setIsAdminAuthenticated(true);
+    try {
+      sessionStorage.setItem('kongo_admin_authenticated', 'true');
+    } catch {
+      // ignore
+    }
+    setIsPasswordModalOpen(false);
+    setIsEditModalOpen(true);
+  };
+
+  const handleLockAdmin = () => {
+    setIsAdminAuthenticated(false);
+    try {
+      sessionStorage.removeItem('kongo_admin_authenticated');
+    } catch {
+      // ignore
+    }
+    setIsEditModalOpen(false);
   };
 
   const handleCopyCardUrl = () => {
@@ -180,12 +222,22 @@ export default function App() {
             <button
               id="customize-header-btn"
               type="button"
-              onClick={() => setIsEditModalOpen(true)}
-              title="Modifier les coordonnées"
-              className="p-2 rounded-xl bg-slate-900 hover:bg-slate-850 border border-slate-800 text-slate-300 hover:text-white transition-all text-xs flex items-center gap-1.5"
+              onClick={handleOpenEdit}
+              title={isAdminAuthenticated ? "Modifier les coordonnées (Session administrateur active)" : "Espace d'administration (Protégé par mot de passe)"}
+              className={`p-2 rounded-xl border transition-all text-xs flex items-center gap-1.5 ${
+                isAdminAuthenticated
+                  ? 'bg-emerald-500/15 hover:bg-emerald-500/25 border-emerald-500/40 text-emerald-300 shadow-sm'
+                  : 'bg-slate-900 hover:bg-slate-850 border-slate-800 text-slate-300 hover:text-white'
+              }`}
             >
-              <Settings2 className="w-3.5 h-3.5 text-emerald-400" />
-              <span className="text-[11px] hidden sm:inline">Modifier</span>
+              {isAdminAuthenticated ? (
+                <Settings2 className="w-3.5 h-3.5 text-emerald-400" />
+              ) : (
+                <Lock className="w-3.5 h-3.5 text-amber-400" />
+              )}
+              <span className="text-[11px] hidden sm:inline">
+                {isAdminAuthenticated ? 'Modifier' : 'Admin'}
+              </span>
             </button>
           </div>
         </header>
@@ -317,6 +369,12 @@ export default function App() {
       </div>
 
       {/* ================= MODALS ================= */}
+      <PasswordModal
+        isOpen={isPasswordModalOpen}
+        onClose={() => setIsPasswordModalOpen(false)}
+        onSuccess={handlePasswordSuccess}
+      />
+
       <QrCodeModal
         isOpen={isQrModalOpen}
         onClose={() => setIsQrModalOpen(false)}
@@ -330,6 +388,7 @@ export default function App() {
         profile={profile}
         onSave={handleSaveProfile}
         onReset={handleResetProfile}
+        onLock={handleLockAdmin}
       />
 
       <PhotoModal
