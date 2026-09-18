@@ -1,11 +1,12 @@
 import { useState, useRef, FormEvent, DragEvent, ChangeEvent } from 'react';
-import { X, Save, RotateCcw, MapPin, Phone, Mail, Globe, Linkedin, User, Upload, Image as ImageIcon, Trash2, AlertCircle, Lock, ShieldCheck, Film, Play, CheckCircle2, Video, Loader2 } from 'lucide-react';
+import { X, Save, RotateCcw, MapPin, Phone, Mail, Globe, Linkedin, User, Upload, Image as ImageIcon, Trash2, AlertCircle, Lock, ShieldCheck, Film, Play, CheckCircle2, Video, Loader2, Cloud, Copy, Check, ExternalLink, HelpCircle, Code } from 'lucide-react';
 import { BusinessCardProfile, ShowcaseVideo } from '../types';
 import { KongoLogo } from './KongoLogo';
 import { CloudSyncSettings } from './CloudSyncSettings';
 import { CloudSyncStatus } from '../services/cloudSync';
 import { saveVideoFile } from '../utils/videoStorage';
 import { extractVideoMetadata } from '../utils/videoThumbnail';
+import { uploadVideoToSupabase, uploadPosterToSupabase, SUPABASE_STORAGE_SQL } from '../utils/supabaseStorage';
 
 interface EditProfileModalProps {
   isOpen: boolean;
@@ -36,7 +37,12 @@ export function EditProfileModal({
   const logoInputRef = useRef<HTMLInputElement>(null);
 
   const [uploadingVideoId, setUploadingVideoId] = useState<string | null>(null);
+  const [uploadStatusMessage, setUploadStatusMessage] = useState<string | null>(null);
   const [videoUploadError, setVideoUploadError] = useState<string | null>(null);
+  const [videoStorageError, setVideoStorageError] = useState<string | null>(null);
+  const [showStorageSql, setShowStorageSql] = useState(false);
+  const [copiedStorageSql, setCopiedStorageSql] = useState(false);
+
   const video1InputRef = useRef<HTMLInputElement>(null);
   const video2InputRef = useRef<HTMLInputElement>(null);
 
@@ -123,19 +129,58 @@ export function EditProfileModal({
     }
   };
 
+  const handleCopyStorageSql = () => {
+    navigator.clipboard.writeText(SUPABASE_STORAGE_SQL);
+    setCopiedStorageSql(true);
+    setTimeout(() => setCopiedStorageSql(false), 2500);
+  };
+
   const handleVideoFileSelect = async (videoId: 'video-1' | 'video-2', file: File) => {
     setVideoUploadError(null);
+    setVideoStorageError(null);
+
     if (!file.type.startsWith('video/')) {
       setVideoUploadError('Veuillez sélectionner un fichier vidéo valide (MP4, WebM, MOV).');
       return;
     }
+
     setUploadingVideoId(videoId);
+    setUploadStatusMessage('Analyse des métadonnées vidéo...');
+
     try {
-      // Extract metadata (duration and representative poster frame)
+      // 1. Extract metadata (duration and representative poster frame)
       const { posterUrl, duration } = await extractVideoMetadata(file);
 
-      // Save to IndexedDB to bypass localStorage quota limits
-      const objectUrl = await saveVideoFile(videoId, file);
+      // 2. Save to local IndexedDB as instant fallback
+      const localUrl = await saveVideoFile(videoId, file);
+
+      // 3. Attempt upload to Supabase Storage for universal mobile streaming
+      setUploadStatusMessage('Téléversement vers Supabase Cloud (pour visionnage sur smartphone)...');
+      const uploadRes = await uploadVideoToSupabase(videoId, file, (p) => {
+        if (p.message) setUploadStatusMessage(p.message);
+      });
+
+      let finalVideoUrl = localUrl;
+      let finalPosterUrl = posterUrl || '';
+      let isCloudUploaded = false;
+
+      if (uploadRes.success && uploadRes.url) {
+        finalVideoUrl = uploadRes.url;
+        isCloudUploaded = true;
+        setUploadStatusMessage('Vidéo téléversée avec succès sur le Cloud Supabase !');
+
+        // Also upload poster to cloud if available
+        if (posterUrl) {
+          const cloudPoster = await uploadPosterToSupabase(videoId, posterUrl);
+          if (cloudPoster) finalPosterUrl = cloudPoster;
+        }
+      } else {
+        // Storage upload had an issue (e.g. bucket 'videos' needs creation in dashboard)
+        setVideoStorageError(
+          uploadRes.error ||
+            'La vidéo a été stockée localement. Pour qu\'elle soit visible sur votre smartphone et vos visiteurs, créez le bucket "videos" dans Supabase Storage.'
+        );
+      }
 
       setFormData((prev) => {
         const currentVideos = [...(prev.showcaseVideos || [])];
@@ -162,8 +207,8 @@ export function EditProfileModal({
               : existingIndex >= 0
               ? currentVideos[existingIndex].duration
               : '02:30',
-          videoUrl: objectUrl,
-          posterUrl: posterUrl || (existingIndex >= 0 ? currentVideos[existingIndex].posterUrl : ''),
+          videoUrl: finalVideoUrl,
+          posterUrl: finalPosterUrl || (existingIndex >= 0 ? currentVideos[existingIndex].posterUrl : ''),
         };
 
         if (existingIndex >= 0) {
@@ -178,6 +223,7 @@ export function EditProfileModal({
       setVideoUploadError(`Erreur lors de l'enregistrement de la vidéo: ${err.message || 'Erreur inconnue'}`);
     } finally {
       setUploadingVideoId(null);
+      setTimeout(() => setUploadStatusMessage(null), 3500);
     }
   };
 
@@ -735,6 +781,59 @@ export function EditProfileModal({
               </div>
             )}
 
+            {/* Live Upload Progress */}
+            {uploadStatusMessage && (
+              <div className="p-3 rounded-xl bg-teal-500/10 border border-teal-500/30 flex items-center gap-2.5 text-xs text-teal-300 animate-pulse">
+                <Loader2 className="w-4 h-4 animate-spin text-teal-400 shrink-0" />
+                <span className="font-medium">{uploadStatusMessage}</span>
+              </div>
+            )}
+
+            {/* Storage Advice / Error Banner */}
+            {videoStorageError && (
+              <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-200 text-xs space-y-2">
+                <div className="flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                  <div className="flex-1 space-y-1">
+                    <p className="font-semibold text-amber-300">Synchronisation Smartphone des Vidéos</p>
+                    <p className="text-[11px] text-amber-200/90 leading-relaxed">
+                      {videoStorageError}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-amber-500/20">
+                  <button
+                    type="button"
+                    onClick={() => setShowStorageSql(!showStorageSql)}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-[11px] font-semibold transition-colors"
+                  >
+                    <Code className="w-3 h-3" />
+                    <span>{showStorageSql ? 'Masquer le script SQL' : 'Activer Supabase Storage (Script SQL)'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleCopyStorageSql}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-medium transition-colors"
+                  >
+                    {copiedStorageSql ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3 text-slate-400" />}
+                    <span>{copiedStorageSql ? 'Script copié !' : 'Copier SQL'}</span>
+                  </button>
+                </div>
+
+                {showStorageSql && (
+                  <div className="p-2.5 rounded-xl bg-slate-950/80 border border-amber-500/30 space-y-1.5 text-[10px] font-mono text-slate-300">
+                    <p className="text-slate-400 font-sans">
+                      Dans votre console <strong>Supabase &rarr; SQL Editor</strong>, collez ce script pour autoriser l'envoi public :
+                    </p>
+                    <pre className="overflow-x-auto p-2 bg-black/60 rounded text-emerald-300 select-all">
+                      {SUPABASE_STORAGE_SQL}
+                    </pre>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Video 1 Card */}
             <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-3">
               <div className="flex items-center justify-between">
@@ -744,10 +843,16 @@ export function EditProfileModal({
                   </span>
                   <span className="text-xs font-bold text-white">Vidéo #1 (Terre d'Avenir : Projet Manzi)</span>
                 </div>
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-medium flex items-center gap-1">
-                  <CheckCircle2 className="w-3 h-3" />
-                  <span>Configurée & Active</span>
-                </span>
+                {video1?.videoUrl ? (
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-medium flex items-center gap-1">
+                    <CheckCircle2 className="w-3 h-3" />
+                    <span>{video1.videoUrl.startsWith('blob:') ? 'Stockage local (PC)' : 'Synchronisé Smartphone 📱'}</span>
+                  </span>
+                ) : (
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-400">
+                    Vidéo inactive
+                  </span>
+                )}
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
@@ -824,19 +929,19 @@ export function EditProfileModal({
                   {uploadingVideoId === 'video-1' ? (
                     <>
                       <Loader2 className="w-3.5 h-3.5 text-emerald-400 animate-spin" />
-                      <span>Traitement de la vidéo...</span>
+                      <span>Téléversement Cloud en cours...</span>
                     </>
                   ) : (
                     <>
                       <Upload className="w-3.5 h-3.5 text-emerald-400" />
-                      <span>Remplacer par un fichier vidéo local</span>
+                      <span>Téléverser vers Supabase Cloud (MP4, WebM)</span>
                     </>
                   )}
                 </button>
               </div>
 
               <div>
-                <label className="block text-slate-500 mb-1 text-[11px]">Ou URL directe de la vidéo (MP4, YouTube, Vimeo)</label>
+                <label className="block text-slate-500 mb-1 text-[11px]">Ou URL directe de la vidéo (MP4, YouTube, Vimeo, Google Drive)</label>
                 <input
                   type="text"
                   value={video1?.videoUrl || ''}
@@ -860,7 +965,7 @@ export function EditProfileModal({
                   <div className="flex items-center gap-2">
                     <span className="text-[10px] px-2 py-0.5 rounded-full bg-teal-500/20 text-teal-400 font-medium flex items-center gap-1">
                       <CheckCircle2 className="w-3 h-3" />
-                      <span>Vidéo Active</span>
+                      <span>{video2.videoUrl.startsWith('blob:') ? 'Stockage local (PC)' : 'Synchronisé Smartphone 📱'}</span>
                     </span>
                     <button
                       type="button"
@@ -953,20 +1058,20 @@ export function EditProfileModal({
                   {uploadingVideoId === 'video-2' ? (
                     <>
                       <Loader2 className="w-4 h-4 text-teal-400 animate-spin" />
-                      <span>Téléversement & analyse de la vidéo...</span>
+                      <span>Téléversement vers le Cloud Supabase...</span>
                     </>
                   ) : (
                     <>
                       <Upload className="w-4 h-4 text-teal-400" />
                       <span>
-                        {video2?.videoUrl ? 'Remplacer le fichier vidéo' : 'Téléverser votre 2ème vidéo (MP4, WebM)'}
+                        {video2?.videoUrl ? 'Remplacer la vidéo via Supabase Cloud' : 'Téléverser vers Supabase Cloud (MP4, WebM)'}
                       </span>
                     </>
                   )}
                 </button>
 
                 <div>
-                  <label className="block text-slate-500 mb-1 text-[11px]">Ou URL directe / Lien externe (YouTube, Vimeo, Cloud)</label>
+                  <label className="block text-slate-500 mb-1 text-[11px]">Ou URL directe / Lien externe (YouTube, Google Drive, Vimeo, MP4 public)</label>
                   <input
                     type="text"
                     value={video2?.videoUrl || ''}
@@ -974,6 +1079,9 @@ export function EditProfileModal({
                     placeholder="https://..."
                     className="w-full px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 focus:outline-none focus:border-emerald-500 text-[11px] font-mono"
                   />
+                  <p className="text-[10px] text-slate-500 mt-1">
+                    Astuce : Un lien YouTube, Vimeo, Google Drive public ou un MP4 hébergé en ligne est immédiatement lisible sur smartphone sans nécessiter de quota de stockage.
+                  </p>
                 </div>
               </div>
             </div>

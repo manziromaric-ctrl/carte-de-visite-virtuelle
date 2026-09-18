@@ -17,14 +17,36 @@ CREATE TABLE IF NOT EXISTS public.digital_cards (
 -- 2. Activation de la lecture et écriture publiques (pour la synchronisation)
 ALTER TABLE public.digital_cards ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Lecture publique pour tous les visiteurs" ON public.digital_cards;
 CREATE POLICY "Lecture publique pour tous les visiteurs" 
 ON public.digital_cards FOR SELECT USING (true);
 
+DROP POLICY IF EXISTS "Mise à jour autorisée" ON public.digital_cards;
 CREATE POLICY "Mise à jour autorisée" 
 ON public.digital_cards FOR ALL USING (true);
 
 -- 3. Activation de la diffusion temps réel (Realtime)
-ALTER PUBLICATION supabase_realtime ADD TABLE public.digital_cards;`;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.digital_cards;
+
+-- 4. Bucket de stockage 'videos' pour la synchronisation vidéo smartphone
+INSERT INTO storage.buckets (id, name, public) 
+VALUES ('videos', 'videos', true)
+ON CONFLICT (id) DO UPDATE SET public = true;
+
+DROP POLICY IF EXISTS "Public Videos Read" ON storage.objects;
+CREATE POLICY "Public Videos Read" 
+ON storage.objects FOR SELECT 
+USING (bucket_id = 'videos');
+
+DROP POLICY IF EXISTS "Public Videos Upload" ON storage.objects;
+CREATE POLICY "Public Videos Upload" 
+ON storage.objects FOR INSERT 
+WITH CHECK (bucket_id = 'videos');
+
+DROP POLICY IF EXISTS "Public Videos Update" ON storage.objects;
+CREATE POLICY "Public Videos Update" 
+ON storage.objects FOR UPDATE 
+WITH CHECK (bucket_id = 'videos');`;
 
 export function CloudSyncSettings({ syncStatus }: CloudSyncSettingsProps) {
   const [isOpen, setIsOpen] = useState(false);

@@ -24,9 +24,10 @@ export function VideoPlayerModal({ isOpen, onClose, video, profile }: VideoPlaye
 
   if (!isOpen || !video) return null;
 
-  // Check if the URL is a YouTube/Vimeo embed
+  // Check if the URL is a YouTube/Vimeo/Google Drive embed
   const isYouTube = video.videoUrl.includes('youtube.com') || video.videoUrl.includes('youtu.be');
   const isVimeo = video.videoUrl.includes('vimeo.com');
+  const isGoogleDrive = video.videoUrl.includes('drive.google.com');
 
   const getYouTubeEmbedUrl = (url: string) => {
     let videoId = '';
@@ -38,6 +39,14 @@ export function VideoPlayerModal({ isOpen, onClose, video, profile }: VideoPlaye
       return url;
     }
     return `https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0`;
+  };
+
+  const getGoogleDriveEmbedUrl = (url: string) => {
+    const match = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/) || url.match(/id=([a-zA-Z0-9_-]+)/);
+    if (match && match[1]) {
+      return `https://drive.google.com/file/d/${match[1]}/preview`;
+    }
+    return url;
   };
 
   const handleContactWhatsApp = () => {
@@ -95,6 +104,14 @@ export function VideoPlayerModal({ isOpen, onClose, video, profile }: VideoPlaye
               src={video.videoUrl}
               title={video.title}
               allow="autoplay; fullscreen; picture-in-picture"
+              allowFullScreen
+              className="w-full h-full border-0"
+            />
+          ) : isGoogleDrive ? (
+            <iframe
+              src={getGoogleDriveEmbedUrl(video.videoUrl)}
+              title={video.title}
+              allow="autoplay"
               allowFullScreen
               className="w-full h-full border-0"
             />
