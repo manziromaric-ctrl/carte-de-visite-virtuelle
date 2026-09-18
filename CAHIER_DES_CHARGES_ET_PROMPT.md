@@ -138,6 +138,26 @@ La modale de scan QR propose 3 modes commutables :
   - Saisie au clavier physique avec validation par la touche Entrée.
   - Message d'erreur explicite en cas de code erroné.
   - Animation de succès et déverrouillage dès la validation du mot de passe `021185`.
+  - Mémorisation de session (`sessionStorage`).
+  - Bouton « Verrouiller » dans l'en-tête de la modale d'édition pour fermer la session à tout moment.
+
+### 4.9 Section Réalisations Vidéo & Preuves de Production (2 Emplacements)
+- **Objectif** : Démontrer le savoir-faire audiovisuel de pointe de l'agence directement aux visiteurs de la carte.
+- **Onglet dédié et intégration Aperçu** : Onglet « Vidéos » dans la barre de filtre avec pastille animée, et affichage en tête de la vue d'ensemble.
+- **Vidéo #1 (Intégrée d'office)** :
+  - *Titre* : Terre d'Avenir : Projet Manzi Camp MAB.
+  - *Thématique* : Exploration & Exploitation Semi-Industrielle des Ressources Stratégiques (Or, Coltan, Cobalt, Cassitérite & Quartz).
+  - *Client / Partenaires* : Partenariat Stratégique MTMA Group x Famille Nama Kiganga (District de Kakamoeka, Département du Kouilou, Congo).
+  - *Réalisation* : Kongo Digital Wave (Présenté par Divin MAYELA & Rock NKOUELOLO).
+  - *Format* : Prises de vues aériennes par drone 4K, cartographie 3D, interviews et valorisation des gisements.
+  - *Lecteur* : Modale cinéma HD avec contrôles complets et bouton WhatsApp direct.
+- **Vidéo #2 (À téléverser par le titulaire)** :
+  - Emplacement réservé et prêt à l'emploi.
+  - Bouton de téléversement direct depuis un ordinateur ou smartphone (fichiers MP4, WebM, MOV).
+  - Support de liens directs et intégrations vidéo externes (YouTube, Vimeo, Cloud).
+- **Moteur de stockage hybride IndexedDB** :
+  - Contourne la limite de 5 Mo de `localStorage` pour supporter des fichiers vidéo volumineux en toute fluidité.
+  - Génération automatique de la miniature (vignette) et calcul de la durée dès le téléversement du fichier.
 - **Gestion de session** :
   - Mémorisation de l'authentification dans la session de navigation (`sessionStorage`).
   - Bouton **« Verrouiller »** présent dans l'en-tête du panneau d'édition permettant de refermer immédiatement la session administrateur.
@@ -151,7 +171,18 @@ Accessible uniquement après validation du mot de passe `021185` :
 - Bouton « Enregistrer les modifications » avec sauvegarde en `localStorage`.
 - Bouton « Réinitialiser par défaut » pour restaurer les données d'origine d'Ange Elenga.
 
-### 4.10 Modale Visionneuse Photo Portrait HD
+### 4.10 Synchronisation Cloud Temps Réel & Backend Universel (Firebase + Supabase)
+- **Diffusion Universelle en Temps Réel** :
+  - Tout changement apporté par l'administrateur (textes, contacts, repères GPS, avatar, portfolio vidéo) est persisté sur le cloud.
+  - Dès qu'une modification est enregistrée, elle est instantanément transmise à tous les terminaux (smartphones, ordinateurs, tablettes des lecteurs et clients) sans rechargement de page.
+  - Indicateur visuel d'état en direct dans l'en-tête de la carte avec pastille animée (`En direct`).
+- **Support Hybride Firebase Firestore & Supabase** :
+  - Backend cloud Firestore déployé et actif par défaut (sécurité configurée dans `firestore.rules`).
+  - Module d'intégration Supabase (`@supabase/supabase-js`) prêt à l'emploi : configuration possible de l'URL Supabase (`VITE_SUPABASE_URL`) et de la clé anonyme (`VITE_SUPABASE_ANON_KEY`) directement dans le panneau d'administration pour la double synchronisation temps réel (Realtime Broadcast) et le stockage de médias (Supabase Storage).
+- **Moteur de Fallback & Persistance Hors-Ligne** :
+  - Maintien du cache `localStorage` et de la base `IndexedDB` pour garantir un chargement instantané même en cas de réseau instable.
+
+### 4.11 Modale Visionneuse Photo Portrait HD
 - Clic sur la photo de profil pour ouvrir une modale plein écran avec zoom et coordonnées récapitulatives.
 
 ---

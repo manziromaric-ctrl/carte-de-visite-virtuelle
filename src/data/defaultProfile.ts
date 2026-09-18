@@ -38,4 +38,28 @@ export const DEFAULT_PROFILE: BusinessCardProfile = {
     'Project Management',
     'Tech & Web Solutions',
   ],
+  showcaseVideos: [
+    {
+      id: 'video-1',
+      title: 'Terre d\'Avenir : Projet Manzi Camp MAB',
+      subtitle: 'Exploration & Exploitation Semi-Industrielle des Ressources Stratégiques',
+      description: 'Documentaire institutionnel et film d\'investissement minier d\'envergure réalisé pour le Partenariat Stratégique MTMA Group x Famille Nama Kiganga (District de Kakamoeka, Département du Kouilou, Congo). Production complète : prises de vues par drone 4K, cartographie 3D, interviews terrain et valorisation des gisements stratégiques (Or, Coltan, Cobalt, Cassitérite & Quartz).',
+      client: 'MTMA Group x Famille Nama Kiganga',
+      category: 'Production Documentaire & Drone 4K',
+      duration: '03:39',
+      videoUrl: '/videos/manzi_camp_mab.mp4',
+      posterUrl: '/manzi_video_poster.jpg',
+    },
+    {
+      id: 'video-2',
+      title: 'Deuxième Réalisation Vidéo (À configurer)',
+      subtitle: 'Votre prochaine vidéo de démonstration Kongo Digital Wave',
+      description: 'Emplacement réservé pour téléverser votre 2ème vidéo de production. Utilisez l\'espace "Modifier" (Mode Admin) pour importer votre fichier MP4/WebM ou insérer un lien vidéo direct.',
+      client: 'Kongo Digital Wave',
+      category: 'Production Corporate & Spot Publicitaire',
+      duration: 'En attente',
+      videoUrl: '',
+      posterUrl: '',
+    },
+  ],
 };

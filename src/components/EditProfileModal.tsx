@@ -1,7 +1,11 @@
 import { useState, useRef, FormEvent, DragEvent, ChangeEvent } from 'react';
-import { X, Save, RotateCcw, MapPin, Phone, Mail, Globe, Linkedin, User, Upload, Image as ImageIcon, Trash2, AlertCircle, Lock, ShieldCheck } from 'lucide-react';
-import { BusinessCardProfile } from '../types';
+import { X, Save, RotateCcw, MapPin, Phone, Mail, Globe, Linkedin, User, Upload, Image as ImageIcon, Trash2, AlertCircle, Lock, ShieldCheck, Film, Play, CheckCircle2, Video, Loader2 } from 'lucide-react';
+import { BusinessCardProfile, ShowcaseVideo } from '../types';
 import { KongoLogo } from './KongoLogo';
+import { CloudSyncSettings } from './CloudSyncSettings';
+import { CloudSyncStatus } from '../services/cloudSync';
+import { saveVideoFile } from '../utils/videoStorage';
+import { extractVideoMetadata } from '../utils/videoThumbnail';
 
 interface EditProfileModalProps {
   isOpen: boolean;
@@ -10,6 +14,7 @@ interface EditProfileModalProps {
   onSave: (updated: BusinessCardProfile) => void;
   onReset: () => void;
   onLock?: () => void;
+  syncStatus?: CloudSyncStatus | null;
 }
 
 export function EditProfileModal({
@@ -19,6 +24,7 @@ export function EditProfileModal({
   onSave,
   onReset,
   onLock,
+  syncStatus,
 }: EditProfileModalProps) {
   const [formData, setFormData] = useState<BusinessCardProfile>({ ...profile });
   const [isDragging, setIsDragging] = useState(false);
@@ -28,6 +34,11 @@ export function EditProfileModal({
   const [isLogoDragging, setIsLogoDragging] = useState(false);
   const [logoError, setLogoError] = useState<string | null>(null);
   const logoInputRef = useRef<HTMLInputElement>(null);
+
+  const [uploadingVideoId, setUploadingVideoId] = useState<string | null>(null);
+  const [videoUploadError, setVideoUploadError] = useState<string | null>(null);
+  const video1InputRef = useRef<HTMLInputElement>(null);
+  const video2InputRef = useRef<HTMLInputElement>(null);
 
   if (!isOpen) return null;
 
@@ -111,6 +122,110 @@ export function EditProfileModal({
       onClose();
     }
   };
+
+  const handleVideoFileSelect = async (videoId: 'video-1' | 'video-2', file: File) => {
+    setVideoUploadError(null);
+    if (!file.type.startsWith('video/')) {
+      setVideoUploadError('Veuillez sélectionner un fichier vidéo valide (MP4, WebM, MOV).');
+      return;
+    }
+    setUploadingVideoId(videoId);
+    try {
+      // Extract metadata (duration and representative poster frame)
+      const { posterUrl, duration } = await extractVideoMetadata(file);
+
+      // Save to IndexedDB to bypass localStorage quota limits
+      const objectUrl = await saveVideoFile(videoId, file);
+
+      setFormData((prev) => {
+        const currentVideos = [...(prev.showcaseVideos || [])];
+        const existingIndex = currentVideos.findIndex((v) => v.id === videoId);
+
+        const defaultTitle =
+          videoId === 'video-1'
+            ? 'Terre d\'Avenir : Projet Manzi Camp MAB'
+            : file.name.replace(/\.[^/.]+$/, '');
+
+        const updatedVideo: ShowcaseVideo = {
+          id: videoId,
+          title: existingIndex >= 0 ? currentVideos[existingIndex].title : defaultTitle,
+          subtitle: existingIndex >= 0 ? currentVideos[existingIndex].subtitle : 'Production Kongo Digital Wave',
+          description:
+            existingIndex >= 0
+              ? currentVideos[existingIndex].description
+              : 'Réalisation audiovisuelle de premier plan par Kongo Digital Wave.',
+          client: existingIndex >= 0 ? currentVideos[existingIndex].client : 'Kongo Digital Wave',
+          category: existingIndex >= 0 ? currentVideos[existingIndex].category : 'Production Vidéo',
+          duration:
+            duration && duration !== '00:00'
+              ? duration
+              : existingIndex >= 0
+              ? currentVideos[existingIndex].duration
+              : '02:30',
+          videoUrl: objectUrl,
+          posterUrl: posterUrl || (existingIndex >= 0 ? currentVideos[existingIndex].posterUrl : ''),
+        };
+
+        if (existingIndex >= 0) {
+          currentVideos[existingIndex] = updatedVideo;
+        } else {
+          currentVideos.push(updatedVideo);
+        }
+
+        return { ...prev, showcaseVideos: currentVideos };
+      });
+    } catch (err: any) {
+      setVideoUploadError(`Erreur lors de l'enregistrement de la vidéo: ${err.message || 'Erreur inconnue'}`);
+    } finally {
+      setUploadingVideoId(null);
+    }
+  };
+
+  const handleUpdateVideoField = (
+    videoId: 'video-1' | 'video-2',
+    field: keyof ShowcaseVideo,
+    value: string
+  ) => {
+    setFormData((prev) => {
+      const currentVideos = [...(prev.showcaseVideos || [])];
+      const index = currentVideos.findIndex((v) => v.id === videoId);
+      if (index >= 0) {
+        currentVideos[index] = { ...currentVideos[index], [field]: value };
+      } else {
+        const newVideo: ShowcaseVideo = {
+          id: videoId,
+          title: field === 'title' ? value : (videoId === 'video-1' ? 'Terre d\'Avenir : Projet Manzi' : 'Deuxième Réalisation'),
+          subtitle: field === 'subtitle' ? value : '',
+          description: field === 'description' ? value : '',
+          category: field === 'category' ? value : 'Production Vidéo',
+          videoUrl: field === 'videoUrl' ? value : '',
+          [field]: value,
+        };
+        currentVideos.push(newVideo);
+      }
+      return { ...prev, showcaseVideos: currentVideos };
+    });
+  };
+
+  const handleDeleteVideo = (videoId: 'video-1' | 'video-2') => {
+    setFormData((prev) => {
+      const currentVideos = (prev.showcaseVideos || []).map((v) => {
+        if (v.id === videoId) {
+          return {
+            ...v,
+            videoUrl: '',
+            posterUrl: '',
+            duration: 'En attente',
+          };
+        }
+        return v;
+      });
+      return { ...prev, showcaseVideos: currentVideos };
+    });
+  };
+
+  const video1 = (formData.showcaseVideos || []).find((v) => v.id === 'video-1');
+  const video2 = (formData.showcaseVideos || []).find((v) => v.id === 'video-2');
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md overflow-y-auto animate-in fade-in">
@@ -597,6 +712,275 @@ export function EditProfileModal({
               </div>
             </div>
           </div>
+
+          {/* ================= RÉALISATIONS VIDÉO (2 VIDÉOS) ================= */}
+          <div className="space-y-4 pt-4 border-t border-slate-800">
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold text-white text-xs uppercase tracking-wider flex items-center gap-1.5">
+                <Film className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Réalisations Vidéo & Démonstrations (2 Emplacements)</span>
+              </h3>
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-medium">
+                Preuves de Production
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-400 leading-relaxed">
+              Présentez 2 vidéos phares directement sur la carte virtuelle. Vous pouvez importer des fichiers vidéo (MP4, WebM, MOV) depuis votre appareil ou insérer des liens vidéo directs.
+            </p>
+
+            {videoUploadError && (
+              <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{videoUploadError}</span>
+              </div>
+            )}
+
+            {/* Video 1 Card */}
+            <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="w-6 h-6 rounded-lg bg-emerald-500/20 text-emerald-400 text-xs font-bold flex items-center justify-center">
+                    1
+                  </span>
+                  <span className="text-xs font-bold text-white">Vidéo #1 (Terre d'Avenir : Projet Manzi)</span>
+                </div>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-medium flex items-center gap-1">
+                  <CheckCircle2 className="w-3 h-3" />
+                  <span>Configurée & Active</span>
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                <div>
+                  <label className="block text-slate-400 mb-1">Titre de la vidéo</label>
+                  <input
+                    type="text"
+                    value={video1?.title || ''}
+                    onChange={(e) => handleUpdateVideoField('video-1', 'title', e.target.value)}
+                    placeholder="Titre de la vidéo"
+                    className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-100 focus:outline-none focus:border-emerald-500 text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-400 mb-1">Sous-titre / Thématique</label>
+                  <input
+                    type="text"
+                    value={video1?.subtitle || ''}
+                    onChange={(e) => handleUpdateVideoField('video-1', 'subtitle', e.target.value)}
+                    placeholder="Sous-titre"
+                    className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-100 focus:outline-none focus:border-emerald-500 text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-400 mb-1">Client / Partenaire</label>
+                  <input
+                    type="text"
+                    value={video1?.client || ''}
+                    onChange={(e) => handleUpdateVideoField('video-1', 'client', e.target.value)}
+                    placeholder="Ex: MTMA Group x Famille Nama Kiganga"
+                    className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-100 focus:outline-none focus:border-emerald-500 text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-400 mb-1">Catégorie / Format</label>
+                  <input
+                    type="text"
+                    value={video1?.category || ''}
+                    onChange={(e) => handleUpdateVideoField('video-1', 'category', e.target.value)}
+                    placeholder="Ex: Production Documentaire & Drone 4K"
+                    className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-100 focus:outline-none focus:border-emerald-500 text-xs"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-slate-400 mb-1 text-xs">Description détaillée</label>
+                <textarea
+                  rows={2}
+                  value={video1?.description || ''}
+                  onChange={(e) => handleUpdateVideoField('video-1', 'description', e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-100 focus:outline-none focus:border-emerald-500 text-xs resize-none"
+                />
+              </div>
+
+              {/* Video 1 Source / Upload */}
+              <div className="pt-2 border-t border-slate-900 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                <input
+                  type="file"
+                  ref={video1InputRef}
+                  accept="video/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleVideoFileSelect('video-1', file);
+                  }}
+                />
+                <button
+                  type="button"
+                  disabled={uploadingVideoId === 'video-1'}
+                  onClick={() => video1InputRef.current?.click()}
+                  className="flex-1 px-3 py-2 rounded-xl bg-slate-900 hover:bg-slate-850 border border-slate-800 text-slate-200 text-xs font-semibold flex items-center justify-center gap-2 transition-all"
+                >
+                  {uploadingVideoId === 'video-1' ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 text-emerald-400 animate-spin" />
+                      <span>Traitement de la vidéo...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>Remplacer par un fichier vidéo local</span>
+                    </>
+                  )}
+                </button>
+              </div>
+
+              <div>
+                <label className="block text-slate-500 mb-1 text-[11px]">Ou URL directe de la vidéo (MP4, YouTube, Vimeo)</label>
+                <input
+                  type="text"
+                  value={video1?.videoUrl || ''}
+                  onChange={(e) => handleUpdateVideoField('video-1', 'videoUrl', e.target.value)}
+                  placeholder="/videos/manzi_camp_mab.mp4 ou https://..."
+                  className="w-full px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 focus:outline-none focus:border-emerald-500 text-[11px] font-mono"
+                />
+              </div>
+            </div>
+
+            {/* Video 2 Card (User Upload) */}
+            <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="w-6 h-6 rounded-lg bg-teal-500/20 text-teal-400 text-xs font-bold flex items-center justify-center">
+                    2
+                  </span>
+                  <span className="text-xs font-bold text-white">Vidéo #2 (À téléverser par vos soins)</span>
+                </div>
+                {video2?.videoUrl ? (
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-teal-500/20 text-teal-400 font-medium flex items-center gap-1">
+                      <CheckCircle2 className="w-3 h-3" />
+                      <span>Vidéo Active</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteVideo('video-2')}
+                      className="p-1 text-slate-500 hover:text-red-400 transition-colors"
+                      title="Supprimer cette vidéo"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ) : (
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-amber-400 border border-amber-500/30 font-medium">
+                    En attente de téléversement
+                  </span>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                <div>
+                  <label className="block text-slate-400 mb-1">Titre de la vidéo</label>
+                  <input
+                    type="text"
+                    value={video2?.title || ''}
+                    onChange={(e) => handleUpdateVideoField('video-2', 'title', e.target.value)}
+                    placeholder="Ex: Spot Corporate Entreprise"
+                    className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-100 focus:outline-none focus:border-emerald-500 text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-400 mb-1">Sous-titre / Thématique</label>
+                  <input
+                    type="text"
+                    value={video2?.subtitle || ''}
+                    onChange={(e) => handleUpdateVideoField('video-2', 'subtitle', e.target.value)}
+                    placeholder="Ex: Campagne d'attraction d'investisseurs"
+                    className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-100 focus:outline-none focus:border-emerald-500 text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-400 mb-1">Client / Partenaire</label>
+                  <input
+                    type="text"
+                    value={video2?.client || ''}
+                    onChange={(e) => handleUpdateVideoField('video-2', 'client', e.target.value)}
+                    placeholder="Ex: Nom de l'entreprise cliente"
+                    className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-100 focus:outline-none focus:border-emerald-500 text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-400 mb-1">Catégorie / Format</label>
+                  <input
+                    type="text"
+                    value={video2?.category || ''}
+                    onChange={(e) => handleUpdateVideoField('video-2', 'category', e.target.value)}
+                    placeholder="Ex: Vidéo Corporate / Drone / Spot"
+                    className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-100 focus:outline-none focus:border-emerald-500 text-xs"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-slate-400 mb-1 text-xs">Description</label>
+                <textarea
+                  rows={2}
+                  value={video2?.description || ''}
+                  onChange={(e) => handleUpdateVideoField('video-2', 'description', e.target.value)}
+                  placeholder="Décrivez brièvement le contexte et le savoir-faire démontré dans cette réalisation..."
+                  className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-100 focus:outline-none focus:border-emerald-500 text-xs resize-none"
+                />
+              </div>
+
+              {/* Video 2 Source / Upload */}
+              <div className="pt-2 border-t border-slate-900 space-y-2">
+                <input
+                  type="file"
+                  ref={video2InputRef}
+                  accept="video/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleVideoFileSelect('video-2', file);
+                  }}
+                />
+                <button
+                  type="button"
+                  disabled={uploadingVideoId === 'video-2'}
+                  onClick={() => video2InputRef.current?.click()}
+                  className="w-full px-4 py-3 rounded-2xl bg-gradient-to-r from-teal-500/20 to-emerald-500/20 hover:from-teal-500/30 hover:to-emerald-500/30 border border-teal-500/30 text-teal-300 text-xs font-bold flex items-center justify-center gap-2 transition-all shadow-sm"
+                >
+                  {uploadingVideoId === 'video-2' ? (
+                    <>
+                      <Loader2 className="w-4 h-4 text-teal-400 animate-spin" />
+                      <span>Téléversement & analyse de la vidéo...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="w-4 h-4 text-teal-400" />
+                      <span>
+                        {video2?.videoUrl ? 'Remplacer le fichier vidéo' : 'Téléverser votre 2ème vidéo (MP4, WebM)'}
+                      </span>
+                    </>
+                  )}
+                </button>
+
+                <div>
+                  <label className="block text-slate-500 mb-1 text-[11px]">Ou URL directe / Lien externe (YouTube, Vimeo, Cloud)</label>
+                  <input
+                    type="text"
+                    value={video2?.videoUrl || ''}
+                    onChange={(e) => handleUpdateVideoField('video-2', 'videoUrl', e.target.value)}
+                    placeholder="https://..."
+                    className="w-full px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 focus:outline-none focus:border-emerald-500 text-[11px] font-mono"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Cloud Sync & Supabase Backend Section */}
+          <CloudSyncSettings syncStatus={syncStatus || undefined} />
 
           {/* Form Actions */}
           <div className="flex items-center justify-between pt-4 border-t border-slate-800">

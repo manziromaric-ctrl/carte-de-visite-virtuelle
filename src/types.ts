@@ -8,6 +8,18 @@ export interface GpsLocation {
   plusCode?: string;
 }
 
+export interface ShowcaseVideo {
+  id: string; // 'video-1' | 'video-2'
+  title: string;
+  subtitle?: string;
+  description: string;
+  client?: string;
+  category: string;
+  duration?: string;
+  videoUrl: string;
+  posterUrl?: string;
+}
+
 export interface BusinessCardProfile {
   name: string;
   title: string;
@@ -26,6 +38,7 @@ export interface BusinessCardProfile {
   location: GpsLocation;
   services: string[];
   skills: string[];
+  showcaseVideos?: ShowcaseVideo[];
 }
 
 export type QrTargetType = 'card_url' | 'vcard_contact' | 'google_maps_location';

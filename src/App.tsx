@@ -16,13 +16,15 @@ import {
   Eye,
   Lock
 } from 'lucide-react';
-import { BusinessCardProfile } from './types';
+import { BusinessCardProfile, ShowcaseVideo } from './types';
 import { DEFAULT_PROFILE } from './data/defaultProfile';
 import { PhysicalCardPreview } from './components/PhysicalCardPreview';
 import { ActionButtons } from './components/ActionButtons';
 import { OnlinePresenceSection } from './components/OnlinePresenceSection';
 import { GpsLocationSection } from './components/GpsLocationSection';
 import { AboutSection } from './components/AboutSection';
+import { VideoShowcaseSection } from './components/VideoShowcaseSection';
+import { VideoPlayerModal } from './components/VideoPlayerModal';
 import { QrCodeModal } from './components/QrCodeModal';
 import { EditProfileModal } from './components/EditProfileModal';
 import { PasswordModal } from './components/PasswordModal';
@@ -30,6 +32,13 @@ import { PhotoModal } from './components/PhotoModal';
 import { KongoLogo } from './components/KongoLogo';
 import { downloadVCard } from './utils/vcard';
 import { getDigitalCardUrl } from './utils/cardUrl';
+import { getStoredVideoUrl } from './utils/videoStorage';
+import {
+  subscribeToProfileChanges,
+  saveProfileToCloud,
+  fetchInitialCloudProfile,
+  CloudSyncStatus,
+} from './services/cloudSync';
 
 const STORAGE_KEY = 'kongo_digital_wave_profile_v2';
 const VIEWS_COUNT_KEY = 'kongo_digital_card_views_count';
@@ -47,6 +56,10 @@ export default function App() {
             ...DEFAULT_PROFILE,
             ...parsed,
             avatarUrl: parsed.avatarUrl || DEFAULT_PROFILE.avatarUrl,
+            showcaseVideos:
+              parsed.showcaseVideos && parsed.showcaseVideos.length > 0
+                ? parsed.showcaseVideos
+                : DEFAULT_PROFILE.showcaseVideos,
           };
         } catch {
           // fallback to default
@@ -71,8 +84,89 @@ export default function App() {
   });
   const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
-  const [activeTab, setActiveTab] = useState<'all' | 'links' | 'gps' | 'about'>('all');
+  const [activeTab, setActiveTab] = useState<'all' | 'videos' | 'links' | 'gps' | 'about'>('all');
   const [cardUrlVersion, setCardUrlVersion] = useState(0);
+
+  // Video Player Modal State
+  const [selectedVideo, setSelectedVideo] = useState<ShowcaseVideo | null>(null);
+  const [isVideoModalOpen, setIsVideoModalOpen] = useState(false);
+
+  // Cloud Real-time Sync Status
+  const [syncStatus, setSyncStatus] = useState<CloudSyncStatus | null>(null);
+
+  // Real-time Cloud Synchronization (Firebase Firestore + Supabase)
+  useEffect(() => {
+    // 1. Fetch initial profile from Cloud
+    fetchInitialCloudProfile().then((cloudData) => {
+      if (cloudData && Object.keys(cloudData).length > 0) {
+        setProfile((prev) => ({
+          ...prev,
+          ...cloudData,
+          showcaseVideos:
+            cloudData.showcaseVideos && cloudData.showcaseVideos.length > 0
+              ? cloudData.showcaseVideos
+              : prev.showcaseVideos,
+        }));
+      }
+    });
+
+    // 2. Subscribe to live real-time updates across readers
+    const unsubscribe = subscribeToProfileChanges(
+      (cloudUpdate) => {
+        if (cloudUpdate && Object.keys(cloudUpdate).length > 0) {
+          setProfile((prev) => {
+            const merged = {
+              ...prev,
+              ...cloudUpdate,
+              showcaseVideos:
+                cloudUpdate.showcaseVideos && cloudUpdate.showcaseVideos.length > 0
+                  ? cloudUpdate.showcaseVideos
+                  : prev.showcaseVideos,
+            };
+            try {
+              localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+            } catch {
+              // ignore
+            }
+            return merged;
+          });
+        }
+      },
+      (status) => {
+        setSyncStatus(status);
+      }
+    );
+
+    return () => unsubscribe();
+  }, []);
+
+  // Restore uploaded videos from IndexedDB if stored
+  useEffect(() => {
+    async function restoreIndexedDbVideos() {
+      try {
+        const stored1 = await getStoredVideoUrl('video-1');
+        const stored2 = await getStoredVideoUrl('video-2');
+
+        if (stored1 || stored2) {
+          setProfile((prev) => {
+            const list = [...(prev.showcaseVideos || DEFAULT_PROFILE.showcaseVideos || [])];
+            if (stored1) {
+              const idx1 = list.findIndex((v) => v.id === 'video-1');
+              if (idx1 >= 0) list[idx1] = { ...list[idx1], videoUrl: stored1 };
+            }
+            if (stored2) {
+              const idx2 = list.findIndex((v) => v.id === 'video-2');
+              if (idx2 >= 0) list[idx2] = { ...list[idx2], videoUrl: stored2 };
+            }
+            return { ...prev, showcaseVideos: list };
+          });
+        }
+      } catch {
+        // ignore
+      }
+    }
+    restoreIndexedDbVideos();
+  }, []);
 
   // View counter state with localStorage anti-double-counting
   const [viewCount, setViewCount] = useState<number>(() => {
@@ -117,15 +211,33 @@ export default function App() {
     }
   }, []);
 
-  // Sync with localStorage
+  // Sync with localStorage & Cloud Database (Firestore + Supabase)
   const handleSaveProfile = (updated: BusinessCardProfile) => {
     setProfile(updated);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+    } catch {
+      // ignore
+    }
+
+    // Persist to Cloud backend in real-time
+    saveProfileToCloud(updated).catch((err) => {
+      console.warn('Cloud save error:', err);
+    });
   };
 
   const handleResetProfile = () => {
     setProfile(DEFAULT_PROFILE);
-    localStorage.removeItem(STORAGE_KEY);
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch {
+      // ignore
+    }
+
+    // Reset cloud profile to default
+    saveProfileToCloud(DEFAULT_PROFILE).catch((err) => {
+      console.warn('Cloud reset error:', err);
+    });
   };
 
   const handleOpenEdit = () => {
@@ -188,6 +300,23 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-2">
+            {/* Live Real-time Cloud Sync Badge */}
+            <div
+              id="cloud-realtime-badge"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-slate-900/90 border border-slate-800 text-slate-300 text-xs shadow-sm"
+              title={
+                syncStatus?.isConnected
+                  ? 'Synchronisation cloud en temps réel active (Modifications et médias diffusés en direct)'
+                  : 'Connexion cloud active'
+              }
+            >
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+              </span>
+              <span className="text-[10px] text-emerald-400 font-medium hidden xs:inline">En direct</span>
+            </div>
+
             {/* View Counter Badge */}
             <div
               id="card-view-counter-header"
@@ -284,22 +413,34 @@ export default function App() {
         </section>
 
         {/* Navigation Filter Tabs */}
-        <div className="flex items-center justify-center p-1 rounded-2xl bg-slate-900/90 border border-slate-800/80 text-xs">
+        <div className="flex items-center justify-center p-1 rounded-2xl bg-slate-900/90 border border-slate-800/80 text-xs gap-0.5 overflow-x-auto">
           <button
             type="button"
             onClick={() => setActiveTab('all')}
-            className={`flex-1 py-2 px-3 rounded-xl font-medium transition-all ${
+            className={`flex-1 min-w-[70px] py-2 px-2 rounded-xl font-medium transition-all text-center ${
               activeTab === 'all'
                 ? 'bg-emerald-500 text-slate-950 font-bold shadow-md'
                 : 'text-slate-400 hover:text-slate-200'
             }`}
           >
-            Vue d'ensemble
+            Aperçu
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('videos')}
+            className={`flex-1 min-w-[75px] py-2 px-2 rounded-xl font-medium transition-all text-center flex items-center justify-center gap-1 ${
+              activeTab === 'videos'
+                ? 'bg-emerald-500 text-slate-950 font-bold shadow-md'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <span>Vidéos</span>
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
           </button>
           <button
             type="button"
             onClick={() => setActiveTab('links')}
-            className={`flex-1 py-2 px-3 rounded-xl font-medium transition-all ${
+            className={`flex-1 min-w-[65px] py-2 px-2 rounded-xl font-medium transition-all text-center ${
               activeTab === 'links'
                 ? 'bg-emerald-500 text-slate-950 font-bold shadow-md'
                 : 'text-slate-400 hover:text-slate-200'
@@ -310,7 +451,7 @@ export default function App() {
           <button
             type="button"
             onClick={() => setActiveTab('gps')}
-            className={`flex-1 py-2 px-3 rounded-xl font-medium transition-all ${
+            className={`flex-1 min-w-[60px] py-2 px-2 rounded-xl font-medium transition-all text-center ${
               activeTab === 'gps'
                 ? 'bg-emerald-500 text-slate-950 font-bold shadow-md'
                 : 'text-slate-400 hover:text-slate-200'
@@ -321,7 +462,7 @@ export default function App() {
           <button
             type="button"
             onClick={() => setActiveTab('about')}
-            className={`flex-1 py-2 px-3 rounded-xl font-medium transition-all ${
+            className={`flex-1 min-w-[65px] py-2 px-2 rounded-xl font-medium transition-all text-center ${
               activeTab === 'about'
                 ? 'bg-emerald-500 text-slate-950 font-bold shadow-md'
                 : 'text-slate-400 hover:text-slate-200'
@@ -332,6 +473,19 @@ export default function App() {
         </div>
 
         {/* ================= CONTENT SECTIONS BASED ON TAB ================= */}
+        {(activeTab === 'all' || activeTab === 'videos') && (
+          <section id="videos-section" aria-label="Réalisations audiovisuelles">
+            <VideoShowcaseSection
+              profile={profile}
+              onPlayVideo={(v) => {
+                setSelectedVideo(v);
+                setIsVideoModalOpen(true);
+              }}
+              onOpenAdmin={handleOpenEdit}
+            />
+          </section>
+        )}
+
         {(activeTab === 'all' || activeTab === 'links') && (
           <section aria-label="Présence en ligne">
             <OnlinePresenceSection profile={profile} />
@@ -389,11 +543,19 @@ export default function App() {
         onSave={handleSaveProfile}
         onReset={handleResetProfile}
         onLock={handleLockAdmin}
+        syncStatus={syncStatus}
       />
 
       <PhotoModal
         isOpen={isPhotoModalOpen}
         onClose={() => setIsPhotoModalOpen(false)}
+        profile={profile}
+      />
+
+      <VideoPlayerModal
+        isOpen={isVideoModalOpen}
+        onClose={() => setIsVideoModalOpen(false)}
+        video={selectedVideo}
         profile={profile}
       />
     </div>

@@ -1,0 +1,37 @@
+{
+  "entities": {
+    "BusinessCardProfile": {
+      "title": "BusinessCardProfile",
+      "description": "Profil de carte de visite numérique synchronisé en direct et accessible en temps réel par tous les visiteurs.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "title": { "type": "string" },
+        "company": { "type": "string" },
+        "tagline": { "type": "string" },
+        "bio": { "type": "string" },
+        "avatarUrl": { "type": "string" },
+        "logoUrl": { "type": "string" },
+        "emblemUrl": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "whatsapp": { "type": "string" },
+        "linkedinUrl": { "type": "string" },
+        "websiteUrl": { "type": "string" },
+        "googleMapsShareUrl": { "type": "string" },
+        "services": { "type": "array" },
+        "skills": { "type": "array" },
+        "location": { "type": "object" },
+        "showcaseVideos": { "type": "array" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["name", "title", "company", "phone", "email"]
+    }
+  },
+  "firestore": {
+    "/profiles/{profileId}": {
+      "schema": "BusinessCardProfile",
+      "description": "Profil de la carte de visite numérique Kongo Digital Wave."
+    }
+  }
+}
