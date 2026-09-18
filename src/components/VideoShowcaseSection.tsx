@@ -181,11 +181,15 @@ export function VideoShowcaseSection({
                   <Sparkles className="w-3 h-3 text-teal-400" />
                   <span>{video2.category}</span>
                 </span>
-                {video2.duration && video2.duration !== 'En attente' && (
+                {video2.videoUrl?.startsWith('blob:') ? (
+                  <span className="px-2 py-0.5 rounded-md bg-amber-500/90 text-slate-950 font-semibold text-[10px] backdrop-blur">
+                    Sync Cloud requise
+                  </span>
+                ) : video2.duration && video2.duration !== 'En attente' ? (
                   <span className="px-2 py-0.5 rounded-md bg-black/80 text-white font-mono text-[10px] sm:text-xs font-medium backdrop-blur">
                     {video2.duration}
                   </span>
-                )}
+                ) : null}
               </div>
 
               <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between text-white text-xs">
@@ -193,8 +197,12 @@ export function VideoShowcaseSection({
                   <Building2 className="w-3.5 h-3.5 text-teal-400 shrink-0" />
                   <span>{video2.client || profile.company}</span>
                 </span>
-                <span className="text-[10px] text-teal-300 bg-teal-950/80 px-2 py-0.5 rounded-full border border-teal-500/40 font-medium">
-                  Cliquez pour lire
+                <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${
+                  video2.videoUrl?.startsWith('blob:')
+                    ? 'text-amber-300 bg-amber-950/80 border-amber-500/40'
+                    : 'text-teal-300 bg-teal-950/80 border-teal-500/40'
+                }`}>
+                  {video2.videoUrl?.startsWith('blob:') ? '📱 Synchroniser / Lire' : 'Cliquez pour lire'}
                 </span>
               </div>
             </div>

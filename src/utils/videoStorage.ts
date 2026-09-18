@@ -4,7 +4,7 @@ const DB_NAME = 'kongo_digital_video_db';
 const DB_VERSION = 1;
 const STORE_NAME = 'showcase_videos';
 
-interface StoredVideoRecord {
+export interface StoredVideoRecord {
   id: string; // 'video-1' | 'video-2'
   blob: Blob;
   name: string;
@@ -109,6 +109,31 @@ export async function getStoredVideoUrl(videoId: string): Promise<string | null>
         } else {
           resolve(null);
         }
+      };
+
+      request.onerror = () => {
+        resolve(null);
+      };
+    });
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Get stored video record including the raw Blob from IndexedDB
+ */
+export async function getStoredVideoRecord(videoId: string): Promise<StoredVideoRecord | null> {
+  try {
+    const db = await openDatabase();
+    return new Promise((resolve) => {
+      const transaction = db.transaction(STORE_NAME, 'readonly');
+      const store = transaction.objectStore(STORE_NAME);
+      const request = store.get(videoId);
+
+      request.onsuccess = () => {
+        const record = request.result as StoredVideoRecord | undefined;
+        resolve(record || null);
       };
 
       request.onerror = () => {

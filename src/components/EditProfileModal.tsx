@@ -1,10 +1,10 @@
 import { useState, useRef, FormEvent, DragEvent, ChangeEvent } from 'react';
-import { X, Save, RotateCcw, MapPin, Phone, Mail, Globe, Linkedin, User, Upload, Image as ImageIcon, Trash2, AlertCircle, Lock, ShieldCheck, Film, Play, CheckCircle2, Video, Loader2, Cloud, Copy, Check, ExternalLink, HelpCircle, Code } from 'lucide-react';
+import { X, Save, RotateCcw, MapPin, Phone, Mail, Globe, Linkedin, User, Upload, Image as ImageIcon, Trash2, AlertCircle, Lock, ShieldCheck, Film, Play, CheckCircle2, Video, Loader2, Cloud, Copy, Check, ExternalLink, HelpCircle, Code, RefreshCw } from 'lucide-react';
 import { BusinessCardProfile, ShowcaseVideo } from '../types';
 import { KongoLogo } from './KongoLogo';
 import { CloudSyncSettings } from './CloudSyncSettings';
 import { CloudSyncStatus } from '../services/cloudSync';
-import { saveVideoFile } from '../utils/videoStorage';
+import { saveVideoFile, getStoredVideoRecord } from '../utils/videoStorage';
 import { extractVideoMetadata } from '../utils/videoThumbnail';
 import { uploadVideoToSupabase, uploadPosterToSupabase, SUPABASE_STORAGE_SQL } from '../utils/supabaseStorage';
 
@@ -962,11 +962,45 @@ export function EditProfileModal({
                   <span className="text-xs font-bold text-white">Vidéo #2 (À téléverser par vos soins)</span>
                 </div>
                 {video2?.videoUrl ? (
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-teal-500/20 text-teal-400 font-medium flex items-center gap-1">
-                      <CheckCircle2 className="w-3 h-3" />
-                      <span>{video2.videoUrl.startsWith('blob:') ? 'Stockage local (PC)' : 'Synchronisé Smartphone 📱'}</span>
-                    </span>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {video2.videoUrl.startsWith('blob:') ? (
+                      <>
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 font-medium flex items-center gap-1">
+                          <AlertCircle className="w-3 h-3 text-amber-400" />
+                          <span>Stockage local (PC) • Sync requise pour mobile</span>
+                        </span>
+                        <button
+                          type="button"
+                          disabled={uploadingVideoId === 'video-2'}
+                          onClick={async () => {
+                            const record = await getStoredVideoRecord('video-2');
+                            if (record && record.blob) {
+                              setUploadingVideoId('video-2');
+                              setUploadStatusMessage('Téléversement vers Supabase Storage...');
+                              const res = await uploadVideoToSupabase('video-2', record.blob);
+                              if (res.success && res.url) {
+                                handleUpdateVideoField('video-2', 'videoUrl', res.url);
+                                setUploadStatusMessage('Vidéo 2 synchronisée sur le Cloud !');
+                              } else {
+                                setVideoStorageError(res.error || 'Erreur lors de l\'envoi');
+                              }
+                              setUploadingVideoId(null);
+                            } else {
+                              video2InputRef.current?.click();
+                            }
+                          }}
+                          className="text-[10px] px-2.5 py-0.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 font-bold border border-emerald-500/40 flex items-center gap-1 transition-colors"
+                        >
+                          <RefreshCw className={`w-3 h-3 ${uploadingVideoId === 'video-2' ? 'animate-spin' : ''}`} />
+                          <span>Transférer sur le Cloud Supabase</span>
+                        </button>
+                      </>
+                    ) : (
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-teal-500/20 text-teal-400 font-medium flex items-center gap-1">
+                        <CheckCircle2 className="w-3 h-3" />
+                        <span>Synchronisé Smartphone & Cloud 📱</span>
+                      </span>
+                    )}
                     <button
                       type="button"
                       onClick={() => handleDeleteVideo('video-2')}
@@ -1112,10 +1146,20 @@ export function EditProfileModal({
 
               <button
                 type="submit"
-                className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-md shadow-emerald-950/40 transition-colors"
+                disabled={uploadingVideoId !== null}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 disabled:text-slate-400 disabled:cursor-not-allowed text-white text-xs font-bold shadow-md shadow-emerald-950/40 transition-colors"
               >
-                <Save className="w-3.5 h-3.5" />
-                <span>Enregistrer</span>
+                {uploadingVideoId ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Téléversement Cloud en cours...</span>
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-3.5 h-3.5" />
+                    <span>Enregistrer</span>
+                  </>
+                )}
               </button>
             </div>
           </div>

@@ -31,7 +31,7 @@ WITH CHECK (bucket_id = 'videos');`;
  */
 export async function uploadVideoToSupabase(
   videoId: 'video-1' | 'video-2',
-  file: File,
+  file: File | Blob,
   onProgress?: (status: VideoUploadProgress) => void
 ): Promise<{ success: boolean; url?: string; error?: string }> {
   const supabase = getSupabaseClient();
@@ -42,34 +42,44 @@ export async function uploadVideoToSupabase(
     };
   }
 
+  // Check file size (Supabase Free plan allows up to 50MB per file)
+  if (file.size > 52428800) {
+    const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
+    return {
+      success: false,
+      error: `La vidéo fait ${sizeMb} Mo, ce qui dépasse la limite de 50 Mo de Supabase. Veuillez compresser votre fichier vidéo (720p ou 1080p MP4) ou utiliser un lien vidéo direct (YouTube, Google Drive, ou URL MP4).`,
+    };
+  }
+
   onProgress?.({
     status: 'uploading',
     message: 'Téléversement vers votre Cloud Supabase Storage en cours...',
   });
 
   const bucketName = 'videos';
-  const fileExt = file.name.split('.').pop() || 'mp4';
-  const sanitizedName = file.name.replace(/[^a-zA-Z0-9_-]/g, '_');
-  const filePath = `${videoId}_${Date.now()}_${sanitizedName}.${fileExt}`;
+  const rawName = (file as File).name || `${videoId}.mp4`;
+  const fileExt = (rawName.split('.').pop() || 'mp4').toLowerCase();
+  const baseName = rawName.includes('.') ? rawName.substring(0, rawName.lastIndexOf('.')) : rawName;
+  const sanitizedBase = baseName.replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 35) || 'video';
+  const filePath = `${videoId}_${Date.now()}_${sanitizedBase}.${fileExt}`;
+
+  // Ensure content type is well formed for mobile streaming
+  let determinedType = file.type;
+  if (!determinedType || determinedType === 'application/octet-stream') {
+    if (fileExt === 'mp4') determinedType = 'video/mp4';
+    else if (fileExt === 'webm') determinedType = 'video/webm';
+    else if (fileExt === 'mov') determinedType = 'video/quicktime';
+    else determinedType = 'video/mp4';
+  }
 
   try {
-    // 1. Attempt to create bucket if it doesn't exist
-    try {
-      await supabase.storage.createBucket(bucketName, {
-        public: true,
-        fileSizeLimit: 104857600, // 100MB
-      });
-    } catch {
-      // Bucket might already exist or need dashboard policy, continue
-    }
-
-    // 2. Upload video file to Supabase Storage
+    // Upload video file to Supabase Storage
     const { data: uploadData, error: uploadError } = await supabase.storage
       .from(bucketName)
       .upload(filePath, file, {
         cacheControl: '3600',
         upsert: true,
-        contentType: file.type || 'video/mp4',
+        contentType: determinedType,
       });
 
     if (uploadError) {
@@ -84,7 +94,7 @@ export async function uploadVideoToSupabase(
       ) {
         return {
           success: false,
-          error: `Le bucket Supabase "videos" nécessite d'être créé en mode public dans votre console Supabase Storage. (Voir script SQL ci-dessous)`,
+          error: `Le bucket Supabase "videos" nécessite d'être configuré en mode public dans votre console Supabase Storage.`,
         };
       }
 
@@ -94,7 +104,7 @@ export async function uploadVideoToSupabase(
       };
     }
 
-    // 3. Obtain permanent public HTTPS URL
+    // Obtain permanent public HTTPS URL
     const { data: urlData } = supabase.storage.from(bucketName).getPublicUrl(filePath);
     const publicUrl = urlData.publicUrl;
 

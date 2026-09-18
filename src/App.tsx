@@ -32,7 +32,8 @@ import { PhotoModal } from './components/PhotoModal';
 import { KongoLogo } from './components/KongoLogo';
 import { downloadVCard } from './utils/vcard';
 import { getDigitalCardUrl } from './utils/cardUrl';
-import { getStoredVideoUrl } from './utils/videoStorage';
+import { getStoredVideoUrl, getStoredVideoRecord } from './utils/videoStorage';
+import { uploadVideoToSupabase } from './utils/supabaseStorage';
 import {
   subscribeToProfileChanges,
   saveProfileToCloud,
@@ -140,32 +141,90 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // Restore uploaded videos from IndexedDB if stored
+  // Restore uploaded videos from IndexedDB and auto-sync to Cloud for mobile streaming
   useEffect(() => {
-    async function restoreIndexedDbVideos() {
-      try {
-        const stored1 = await getStoredVideoUrl('video-1');
-        const stored2 = await getStoredVideoUrl('video-2');
+    let isMounted = true;
 
-        if (stored1 || stored2) {
-          setProfile((prev) => {
-            const list = [...(prev.showcaseVideos || DEFAULT_PROFILE.showcaseVideos || [])];
-            if (stored1) {
-              const idx1 = list.findIndex((v) => v.id === 'video-1');
-              if (idx1 >= 0) list[idx1] = { ...list[idx1], videoUrl: stored1 };
+    async function restoreAndSyncVideos() {
+      try {
+        const storedUrl1 = await getStoredVideoUrl('video-1');
+        const storedUrl2 = await getStoredVideoUrl('video-2');
+        const record2 = await getStoredVideoRecord('video-2');
+
+        // 1. Only use local blob if there is NO valid remote https URL in profile
+        setProfile((prev) => {
+          const list = [...(prev.showcaseVideos || DEFAULT_PROFILE.showcaseVideos || [])];
+          let changed = false;
+
+          const idx1 = list.findIndex((v) => v.id === 'video-1');
+          if (idx1 >= 0 && storedUrl1) {
+            const currentUrl = list[idx1].videoUrl || '';
+            const isRemoteValid = currentUrl.startsWith('http') && !currentUrl.startsWith('blob:');
+            if (!isRemoteValid) {
+              list[idx1] = { ...list[idx1], videoUrl: storedUrl1 };
+              changed = true;
             }
-            if (stored2) {
-              const idx2 = list.findIndex((v) => v.id === 'video-2');
-              if (idx2 >= 0) list[idx2] = { ...list[idx2], videoUrl: stored2 };
+          }
+
+          const idx2 = list.findIndex((v) => v.id === 'video-2');
+          if (idx2 >= 0 && storedUrl2) {
+            const currentUrl = list[idx2].videoUrl || '';
+            const isRemoteValid = currentUrl.startsWith('http') && !currentUrl.startsWith('blob:');
+            if (!isRemoteValid) {
+              list[idx2] = { ...list[idx2], videoUrl: storedUrl2 };
+              changed = true;
             }
-            return { ...prev, showcaseVideos: list };
-          });
+          }
+
+          return changed ? { ...prev, showcaseVideos: list } : prev;
+        });
+
+        // 2. Auto-sync video-2 to Supabase Cloud if it's stored in IndexedDB but Cloud URL is a blob or missing
+        if (record2 && record2.blob) {
+          // Delay briefly to allow initial cloud profile fetch to finish
+          setTimeout(async () => {
+            if (!isMounted) return;
+
+            setProfile((current) => {
+              const currentV2 = current.showcaseVideos?.find((v) => v.id === 'video-2');
+              const url = currentV2?.videoUrl || '';
+              const needsUpload = !url || url.startsWith('blob:') || !url.startsWith('https://');
+
+              if (needsUpload) {
+                console.log('Synchronisation automatique de la vidéo 2 vers Supabase Storage...');
+                uploadVideoToSupabase('video-2', record2.blob).then((uploadRes) => {
+                  if (uploadRes.success && uploadRes.url && isMounted) {
+                    console.log('Vidéo 2 synchronisée avec succès vers Supabase:', uploadRes.url);
+                    setProfile((latest) => {
+                      const updatedList = [...(latest.showcaseVideos || [])];
+                      const targetIdx = updatedList.findIndex((v) => v.id === 'video-2');
+                      if (targetIdx >= 0) {
+                        updatedList[targetIdx] = {
+                          ...updatedList[targetIdx],
+                          videoUrl: uploadRes.url!,
+                          title: updatedList[targetIdx].title && updatedList[targetIdx].title !== 'Deuxième Réalisation Vidéo (À configurer)'
+                            ? updatedList[targetIdx].title
+                            : (record2.name ? record2.name.replace(/\.[^/.]+$/, '') : 'Deuxième Réalisation Vidéo'),
+                        };
+                      }
+                      const finalProfile = { ...latest, showcaseVideos: updatedList };
+                      saveProfileToCloud(finalProfile);
+                      return finalProfile;
+                    });
+                  }
+                });
+              }
+              return current;
+            });
+          }, 1200);
         }
-      } catch {
-        // ignore
+      } catch (err) {
+        console.warn('Video restore/sync error:', err);
       }
     }
-    restoreIndexedDbVideos();
+
+    restoreAndSyncVideos();
+    return () => { isMounted = false; };
   }, []);
 
   // View counter state with localStorage anti-double-counting
@@ -557,6 +616,7 @@ export default function App() {
         onClose={() => setIsVideoModalOpen(false)}
         video={selectedVideo}
         profile={profile}
+        onSaveProfile={handleSaveProfile}
       />
     </div>
   );
