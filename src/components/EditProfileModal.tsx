@@ -7,6 +7,7 @@ import { CloudSyncStatus } from '../services/cloudSync';
 import { saveVideoFile, getStoredVideoRecord } from '../utils/videoStorage';
 import { extractVideoMetadata } from '../utils/videoThumbnail';
 import { uploadVideoToSupabase, uploadPosterToSupabase, SUPABASE_STORAGE_SQL } from '../utils/supabaseStorage';
+import { optimizeImageForWeb } from '../utils/imageOptimizer';
 
 interface EditProfileModalProps {
   isOpen: boolean;
@@ -46,6 +47,7 @@ export function EditProfileModal({
   const video1InputRef = useRef<HTMLInputElement>(null);
   const video2InputRef = useRef<HTMLInputElement>(null);
   const image2InputRef = useRef<HTMLInputElement>(null);
+  const [isOptimizingImage2, setIsOptimizingImage2] = useState(false);
 
   if (!isOpen) return null;
 
@@ -56,20 +58,25 @@ export function EditProfileModal({
     }
   };
 
-  const processLogoFile = (file: File) => {
+  const processLogoFile = async (file: File) => {
     setLogoError(null);
     if (!file.type.startsWith('image/')) {
       setLogoError('Veuillez sélectionner un fichier image valide (PNG, JPG, SVG, WebP).');
       return;
     }
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const dataUrl = e.target?.result as string;
-      if (dataUrl) {
-        setFormData((prev) => ({ ...prev, logoUrl: dataUrl, emblemUrl: dataUrl }));
-      }
-    };
-    reader.readAsDataURL(file);
+    try {
+      const optimized = await optimizeImageForWeb(file, 400, 400, 0.85);
+      setFormData((prev) => ({ ...prev, logoUrl: optimized, emblemUrl: optimized }));
+    } catch {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const dataUrl = e.target?.result as string;
+        if (dataUrl) {
+          setFormData((prev) => ({ ...prev, logoUrl: dataUrl, emblemUrl: dataUrl }));
+        }
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
@@ -79,20 +86,25 @@ export function EditProfileModal({
     }
   };
 
-  const processFile = (file: File) => {
+  const processFile = async (file: File) => {
     setImageError(null);
     if (!file.type.startsWith('image/')) {
       setImageError('Veuillez sélectionner un fichier image valide (JPG, PNG, WebP).');
       return;
     }
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const dataUrl = e.target?.result as string;
-      if (dataUrl) {
-        setFormData((prev) => ({ ...prev, avatarUrl: dataUrl }));
-      }
-    };
-    reader.readAsDataURL(file);
+    try {
+      const optimized = await optimizeImageForWeb(file, 600, 600, 0.85);
+      setFormData((prev) => ({ ...prev, avatarUrl: optimized }));
+    } catch {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const dataUrl = e.target?.result as string;
+        if (dataUrl) {
+          setFormData((prev) => ({ ...prev, avatarUrl: dataUrl }));
+        }
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   const handleDragOver = (e: DragEvent<HTMLDivElement>) => {
@@ -228,32 +240,43 @@ export function EditProfileModal({
     }
   };
 
-  const handleImage2FileSelect = (file: File) => {
+  const handleImage2FileSelect = async (file: File) => {
     setVideoUploadError(null);
     if (!file.type.startsWith('image/')) {
       setVideoUploadError('Veuillez sélectionner un fichier image valide (JPG, PNG, WebP).');
       return;
     }
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-      const dataUrl = e.target?.result as string;
-      if (dataUrl) {
-        handleUpdateVideoField('video-2', 'imageUrl', dataUrl);
-        handleUpdateVideoField('video-2', 'posterUrl', dataUrl);
-        handleUpdateVideoField('video-2', 'videoUrl', '');
-        // Optional cloud backup for image if Supabase configured
-        try {
-          const cloudUrl = await uploadPosterToSupabase('realisation-2', dataUrl);
-          if (cloudUrl) {
-            handleUpdateVideoField('video-2', 'imageUrl', cloudUrl);
-            handleUpdateVideoField('video-2', 'posterUrl', cloudUrl);
-          }
-        } catch {
-          // dataUrl remains active
+
+    setIsOptimizingImage2(true);
+    setUploadStatusMessage('Optimisation HD pour smartphone & tablette en cours...');
+
+    try {
+      // 1. Resize and compress to crisp HD (~60KB - 90KB) so it syncs to mobile and complies with Firestore
+      const optimizedDataUrl = await optimizeImageForWeb(file, 1280, 720, 0.82);
+
+      // Immediately set into state so preview updates and profile is ready
+      handleUpdateVideoField('video-2', 'imageUrl', optimizedDataUrl);
+      handleUpdateVideoField('video-2', 'posterUrl', optimizedDataUrl);
+      handleUpdateVideoField('video-2', 'videoUrl', '');
+
+      // 2. Also try uploading to Supabase Storage if configured for an external permanent CDN link
+      try {
+        const cloudUrl = await uploadPosterToSupabase('realisation-2', optimizedDataUrl);
+        if (cloudUrl) {
+          handleUpdateVideoField('video-2', 'imageUrl', cloudUrl);
+          handleUpdateVideoField('video-2', 'posterUrl', cloudUrl);
         }
+      } catch {
+        // optimizedDataUrl (<100KB) is already completely valid and ready
       }
-    };
-    reader.readAsDataURL(file);
+
+      setUploadStatusMessage('Image de réalisation optimisée & prête pour tous les téléphones !');
+    } catch (err: any) {
+      setVideoUploadError(err?.message || 'Erreur lors du traitement de l\'image.');
+    } finally {
+      setIsOptimizingImage2(false);
+      setTimeout(() => setUploadStatusMessage(null), 3500);
+    }
   };
 
   const handleUpdateVideoField = (
@@ -1022,14 +1045,24 @@ export function EditProfileModal({
                   />
                   <button
                     type="button"
+                    disabled={isOptimizingImage2}
                     onClick={() => image2InputRef.current?.click()}
-                    className="w-full sm:w-auto px-3.5 py-2 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-sm"
+                    className="w-full sm:w-auto px-3.5 py-2 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-sm disabled:opacity-50"
                   >
-                    <Upload className="w-3.5 h-3.5" />
-                    <span>Choisir une image de réalisation</span>
+                    {isOptimizingImage2 ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        <span>Optimisation en cours...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="w-3.5 h-3.5" />
+                        <span>Choisir une image de réalisation</span>
+                      </>
+                    )}
                   </button>
                   <p className="text-[10px] text-slate-400">
-                    JPG, PNG ou WebP (format paysage 16:9 recommandé). S'affiche instantanément sur mobile & PC sans streaming vidéo requis.
+                    JPG, PNG ou WebP. L'image est automatiquement optimisée en HD léger pour s'afficher instantanément sur iPhone & Android.
                   </p>
                 </div>
               </div>

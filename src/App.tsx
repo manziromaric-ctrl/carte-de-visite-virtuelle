@@ -54,26 +54,38 @@ function sanitizeShowcaseMedia(videos?: ShowcaseVideo[]): ShowcaseVideo[] {
 
   return videos.map((v) => {
     if (v.id === 'video-2') {
-      const isPlaceholder =
+      const isPlaceholderTitle =
         !v.title ||
         v.title.toLowerCase().includes('configurer') ||
         v.title.includes('Deuxième Réalisation');
-      if (isPlaceholder) {
-        return {
-          ...v,
-          ...(defaultV2 || {}),
-          id: 'video-2',
-          type: 'image',
-          title: 'Voici une autre de nos réalisations',
-          subtitle:
-            v.subtitle && !v.subtitle.toLowerCase().includes('prochaine')
-              ? v.subtitle
-              : 'Production de contenu audiovisuel haute définition & spot de marque',
-          imageUrl: v.imageUrl || v.posterUrl || '/kongo_realisation_shoot.jpg',
-          posterUrl: v.posterUrl || '/kongo_realisation_shoot.jpg',
-          videoUrl: '',
-        };
-      }
+
+      // Check if user has uploaded a custom image (either a data:image base64 or a valid image URL)
+      const hasCustomImage = Boolean(
+        v.imageUrl &&
+        v.imageUrl.trim().length > 0 &&
+        !v.imageUrl.includes('manzi_video_poster') &&
+        !v.imageUrl.includes('kongo_digital_logo')
+      );
+
+      const resolvedImage = hasCustomImage
+        ? v.imageUrl!
+        : (v.posterUrl && !v.posterUrl.includes('manzi_video_poster') && !v.posterUrl.includes('kongo_digital_logo')
+            ? v.posterUrl
+            : '/kongo_realisation_shoot.jpg');
+
+      return {
+        ...v,
+        id: 'video-2',
+        type: 'image' as const,
+        title: isPlaceholderTitle ? 'Voici une autre de nos réalisations' : v.title,
+        subtitle:
+          v.subtitle && !v.subtitle.toLowerCase().includes('prochaine')
+            ? v.subtitle
+            : 'Production de contenu audiovisuel haute définition & spot de marque',
+        imageUrl: resolvedImage,
+        posterUrl: resolvedImage,
+        videoUrl: '',
+      };
     }
     return v;
   });

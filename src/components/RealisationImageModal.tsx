@@ -32,7 +32,11 @@ export function RealisationImageModal({
 
   if (!isOpen || !media) return null;
 
-  const imageUrl = media.imageUrl || media.posterUrl || '/kongo_realisation_shoot.jpg';
+  const imageUrl = (media.imageUrl && !media.imageUrl.includes('kongo_digital_logo') && !media.imageUrl.includes('manzi_video_poster'))
+    ? media.imageUrl
+    : (media.posterUrl && !media.posterUrl.includes('kongo_digital_logo') && !media.posterUrl.includes('manzi_video_poster')
+        ? media.posterUrl
+        : '/kongo_realisation_shoot.jpg');
   const displayTitle = (!media.title || media.title.toLowerCase().includes('configurer') || media.title.includes('Deuxième Réalisation'))
     ? 'Voici une autre de nos réalisations'
     : media.title;

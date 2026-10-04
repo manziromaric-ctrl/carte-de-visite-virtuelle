@@ -32,7 +32,11 @@ export function VideoShowcaseSection({
 
   // Check if media2 is an image realization (default or explicit type)
   const isImageRealisation = !media2?.videoUrl || media2?.type === 'image' || Boolean(media2?.imageUrl);
-  const media2ImageSrc = media2?.imageUrl || media2?.posterUrl || '/kongo_realisation_shoot.jpg';
+  const media2ImageSrc = (media2?.imageUrl && !media2.imageUrl.includes('kongo_digital_logo') && !media2.imageUrl.includes('manzi_video_poster'))
+    ? media2.imageUrl
+    : (media2?.posterUrl && !media2.posterUrl.includes('kongo_digital_logo') && !media2.posterUrl.includes('manzi_video_poster')
+        ? media2.posterUrl
+        : '/kongo_realisation_shoot.jpg');
 
   const handleMedia2Click = () => {
     if (isImageRealisation && onViewImage && media2) {
