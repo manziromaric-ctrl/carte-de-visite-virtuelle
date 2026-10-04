@@ -25,6 +25,7 @@ import { GpsLocationSection } from './components/GpsLocationSection';
 import { AboutSection } from './components/AboutSection';
 import { VideoShowcaseSection } from './components/VideoShowcaseSection';
 import { VideoPlayerModal } from './components/VideoPlayerModal';
+import { RealisationImageModal } from './components/RealisationImageModal';
 import { QrCodeModal } from './components/QrCodeModal';
 import { EditProfileModal } from './components/EditProfileModal';
 import { PasswordModal } from './components/PasswordModal';
@@ -46,6 +47,38 @@ const VIEWS_COUNT_KEY = 'kongo_digital_card_views_count';
 const LAST_VIEW_KEY = 'kongo_digital_card_last_view_timestamp';
 const VIEW_COOLDOWN_MS = 30 * 60 * 1000; // 30 minutes cooldown to prevent double-counting
 
+function sanitizeShowcaseMedia(videos?: ShowcaseVideo[]): ShowcaseVideo[] {
+  const defaultList = DEFAULT_PROFILE.showcaseVideos || [];
+  const defaultV2 = defaultList.find((v) => v.id === 'video-2');
+  if (!videos || videos.length === 0) return defaultList;
+
+  return videos.map((v) => {
+    if (v.id === 'video-2') {
+      const isPlaceholder =
+        !v.title ||
+        v.title.toLowerCase().includes('configurer') ||
+        v.title.includes('Deuxième Réalisation');
+      if (isPlaceholder) {
+        return {
+          ...v,
+          ...(defaultV2 || {}),
+          id: 'video-2',
+          type: 'image',
+          title: 'Voici une autre de nos réalisations',
+          subtitle:
+            v.subtitle && !v.subtitle.toLowerCase().includes('prochaine')
+              ? v.subtitle
+              : 'Production de contenu audiovisuel haute définition & spot de marque',
+          imageUrl: v.imageUrl || v.posterUrl || '/kongo_realisation_shoot.jpg',
+          posterUrl: v.posterUrl || '/kongo_realisation_shoot.jpg',
+          videoUrl: '',
+        };
+      }
+    }
+    return v;
+  });
+}
+
 export default function App() {
   const [profile, setProfile] = useState<BusinessCardProfile>(() => {
     if (typeof window !== 'undefined') {
@@ -57,10 +90,7 @@ export default function App() {
             ...DEFAULT_PROFILE,
             ...parsed,
             avatarUrl: parsed.avatarUrl || DEFAULT_PROFILE.avatarUrl,
-            showcaseVideos:
-              parsed.showcaseVideos && parsed.showcaseVideos.length > 0
-                ? parsed.showcaseVideos
-                : DEFAULT_PROFILE.showcaseVideos,
+            showcaseVideos: sanitizeShowcaseMedia(parsed.showcaseVideos),
           };
         } catch {
           // fallback to default
@@ -88,28 +118,30 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<'all' | 'videos' | 'links' | 'gps' | 'about'>('all');
   const [cardUrlVersion, setCardUrlVersion] = useState(0);
 
-  // Video Player Modal State
+  // Video & Image Realisation Modal State
   const [selectedVideo, setSelectedVideo] = useState<ShowcaseVideo | null>(null);
   const [isVideoModalOpen, setIsVideoModalOpen] = useState(false);
+  const [selectedImageMedia, setSelectedImageMedia] = useState<ShowcaseVideo | null>(null);
+  const [isImageModalOpen, setIsImageModalOpen] = useState(false);
 
   // Cloud Real-time Sync Status
   const [syncStatus, setSyncStatus] = useState<CloudSyncStatus | null>(null);
 
   // Real-time Cloud Synchronization (Firebase Firestore + Supabase)
   useEffect(() => {
-    // 1. Fetch initial profile from Cloud
-    fetchInitialCloudProfile().then((cloudData) => {
-      if (cloudData && Object.keys(cloudData).length > 0) {
-        setProfile((prev) => ({
-          ...prev,
-          ...cloudData,
-          showcaseVideos:
-            cloudData.showcaseVideos && cloudData.showcaseVideos.length > 0
-              ? cloudData.showcaseVideos
-              : prev.showcaseVideos,
-        }));
-      }
-    });
+        // 1. Fetch initial profile from Cloud
+        fetchInitialCloudProfile().then((cloudData) => {
+          if (cloudData && Object.keys(cloudData).length > 0) {
+            setProfile((prev) => {
+              const safeList = sanitizeShowcaseMedia(cloudData.showcaseVideos || prev.showcaseVideos);
+              return {
+                ...prev,
+                ...cloudData,
+                showcaseVideos: safeList,
+              };
+            });
+          }
+        });
 
     // 2. Subscribe to live real-time updates across readers
     const unsubscribe = subscribeToProfileChanges(
@@ -119,10 +151,7 @@ export default function App() {
             const merged = {
               ...prev,
               ...cloudUpdate,
-              showcaseVideos:
-                cloudUpdate.showcaseVideos && cloudUpdate.showcaseVideos.length > 0
-                  ? cloudUpdate.showcaseVideos
-                  : prev.showcaseVideos,
+              showcaseVideos: sanitizeShowcaseMedia(cloudUpdate.showcaseVideos || prev.showcaseVideos),
             };
             try {
               localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
@@ -151,8 +180,9 @@ export default function App() {
         const storedUrl2 = await getStoredVideoUrl('video-2');
         const record2 = await getStoredVideoRecord('video-2');
 
-        // 1. Only use local blob if there is NO valid remote https URL in profile
+        // 1. Only use local video blob if there is NO valid remote https URL in profile
         setProfile((prev) => {
+          const defaultV2 = DEFAULT_PROFILE.showcaseVideos?.find((v) => v.id === 'video-2');
           const list = [...(prev.showcaseVideos || DEFAULT_PROFILE.showcaseVideos || [])];
           let changed = false;
 
@@ -167,34 +197,46 @@ export default function App() {
           }
 
           const idx2 = list.findIndex((v) => v.id === 'video-2');
-          if (idx2 >= 0 && storedUrl2) {
-            const currentUrl = list[idx2].videoUrl || '';
-            const isRemoteValid = currentUrl.startsWith('http') && !currentUrl.startsWith('blob:');
-            if (!isRemoteValid) {
-              list[idx2] = { ...list[idx2], videoUrl: storedUrl2 };
-              changed = true;
+          if (idx2 >= 0) {
+            const isV2Placeholder =
+              !list[idx2].title ||
+              list[idx2].title.toLowerCase().includes('configurer') ||
+              list[idx2].title.includes('Deuxième Réalisation') ||
+              (!list[idx2].imageUrl && !list[idx2].videoUrl);
+            if (isV2Placeholder) {
+              if (defaultV2) {
+                list[idx2] = { ...defaultV2 };
+                changed = true;
+              }
+            } else if (list[idx2].type === 'video' && storedUrl2) {
+              const currentUrl = list[idx2].videoUrl || '';
+              const isRemoteValid = currentUrl.startsWith('http') && !currentUrl.startsWith('blob:');
+              if (!isRemoteValid) {
+                list[idx2] = { ...list[idx2], videoUrl: storedUrl2 };
+                changed = true;
+              }
             }
           }
 
           return changed ? { ...prev, showcaseVideos: list } : prev;
         });
 
-        // 2. Auto-sync video-2 to Supabase Cloud if it's stored in IndexedDB but Cloud URL is a blob or missing
+        // 2. Auto-sync video-2 to Supabase Cloud ONLY if it is explicitly configured as a video
         if (record2 && record2.blob) {
-          // Delay briefly to allow initial cloud profile fetch to finish
           setTimeout(async () => {
             if (!isMounted) return;
 
             setProfile((current) => {
               const currentV2 = current.showcaseVideos?.find((v) => v.id === 'video-2');
+              // Skip if slot 2 is an image realization
+              if (currentV2?.type === 'image' || currentV2?.imageUrl) return current;
+
               const url = currentV2?.videoUrl || '';
-              const needsUpload = !url || url.startsWith('blob:') || !url.startsWith('https://');
+              const needsUpload = currentV2?.type === 'video' && (!url || url.startsWith('blob:') || !url.startsWith('https://'));
 
               if (needsUpload) {
-                console.log('Synchronisation automatique de la vidéo 2 vers Supabase Storage...');
                 uploadVideoToSupabase('video-2', record2.blob).then((uploadRes) => {
                   if (uploadRes.success && uploadRes.url && isMounted) {
-                    console.log('Vidéo 2 synchronisée avec succès vers Supabase:', uploadRes.url);
                     setProfile((latest) => {
                       const updatedList = [...(latest.showcaseVideos || [])];
                       const targetIdx = updatedList.findIndex((v) => v.id === 'video-2');
@@ -202,12 +244,9 @@ export default function App() {
                         updatedList[targetIdx] = {
                           ...updatedList[targetIdx],
                           videoUrl: uploadRes.url!,
-                          title: updatedList[targetIdx].title && updatedList[targetIdx].title !== 'Deuxième Réalisation Vidéo (À configurer)'
-                            ? updatedList[targetIdx].title
-                            : (record2.name ? record2.name.replace(/\.[^/.]+$/, '') : 'Deuxième Réalisation Vidéo'),
                         };
                       }
-                      const finalProfile = { ...latest, showcaseVideos: updatedList };
+                      const finalProfile = { ...latest, showcaseVideos: sanitizeShowcaseMedia(updatedList) };
                       saveProfileToCloud(finalProfile);
                       return finalProfile;
                     });
@@ -272,15 +311,19 @@ export default function App() {
 
   // Sync with localStorage & Cloud Database (Firestore + Supabase)
   const handleSaveProfile = (updated: BusinessCardProfile) => {
-    setProfile(updated);
+    const sanitized: BusinessCardProfile = {
+      ...updated,
+      showcaseVideos: sanitizeShowcaseMedia(updated.showcaseVideos),
+    };
+    setProfile(sanitized);
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(sanitized));
     } catch {
       // ignore
     }
 
     // Persist to Cloud backend in real-time
-    saveProfileToCloud(updated).catch((err) => {
+    saveProfileToCloud(sanitized).catch((err) => {
       console.warn('Cloud save error:', err);
     });
   };
@@ -540,6 +583,10 @@ export default function App() {
                 setSelectedVideo(v);
                 setIsVideoModalOpen(true);
               }}
+              onViewImage={(imgItem) => {
+                setSelectedImageMedia(imgItem);
+                setIsImageModalOpen(true);
+              }}
               onOpenAdmin={handleOpenEdit}
             />
           </section>
@@ -617,6 +664,13 @@ export default function App() {
         video={selectedVideo}
         profile={profile}
         onSaveProfile={handleSaveProfile}
+      />
+
+      <RealisationImageModal
+        isOpen={isImageModalOpen}
+        onClose={() => setIsImageModalOpen(false)}
+        media={selectedImageMedia}
+        companyName={profile.company}
       />
     </div>
   );

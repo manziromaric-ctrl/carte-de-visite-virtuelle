@@ -45,6 +45,7 @@ export function EditProfileModal({
 
   const video1InputRef = useRef<HTMLInputElement>(null);
   const video2InputRef = useRef<HTMLInputElement>(null);
+  const image2InputRef = useRef<HTMLInputElement>(null);
 
   if (!isOpen) return null;
 
@@ -225,6 +226,34 @@ export function EditProfileModal({
       setUploadingVideoId(null);
       setTimeout(() => setUploadStatusMessage(null), 3500);
     }
+  };
+
+  const handleImage2FileSelect = (file: File) => {
+    setVideoUploadError(null);
+    if (!file.type.startsWith('image/')) {
+      setVideoUploadError('Veuillez sélectionner un fichier image valide (JPG, PNG, WebP).');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      const dataUrl = e.target?.result as string;
+      if (dataUrl) {
+        handleUpdateVideoField('video-2', 'imageUrl', dataUrl);
+        handleUpdateVideoField('video-2', 'posterUrl', dataUrl);
+        handleUpdateVideoField('video-2', 'videoUrl', '');
+        // Optional cloud backup for image if Supabase configured
+        try {
+          const cloudUrl = await uploadPosterToSupabase('realisation-2', dataUrl);
+          if (cloudUrl) {
+            handleUpdateVideoField('video-2', 'imageUrl', cloudUrl);
+            handleUpdateVideoField('video-2', 'posterUrl', cloudUrl);
+          }
+        } catch {
+          // dataUrl remains active
+        }
+      }
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleUpdateVideoField = (
@@ -952,79 +981,71 @@ export function EditProfileModal({
               </div>
             </div>
 
-            {/* Video 2 Card (User Upload) */}
+            {/* Realisation 2 : Photographie & Tournage (Image) */}
             <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <span className="w-6 h-6 rounded-lg bg-teal-500/20 text-teal-400 text-xs font-bold flex items-center justify-center">
                     2
                   </span>
-                  <span className="text-xs font-bold text-white">Vidéo #2 (À téléverser par vos soins)</span>
+                  <span className="text-xs font-bold text-white">Réalisation #2 : Photographie & Tournage (Image)</span>
                 </div>
-                {video2?.videoUrl ? (
-                  <div className="flex flex-wrap items-center gap-2">
-                    {video2.videoUrl.startsWith('blob:') ? (
-                      <>
-                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 font-medium flex items-center gap-1">
-                          <AlertCircle className="w-3 h-3 text-amber-400" />
-                          <span>Stockage local (PC) • Sync requise pour mobile</span>
-                        </span>
-                        <button
-                          type="button"
-                          disabled={uploadingVideoId === 'video-2'}
-                          onClick={async () => {
-                            const record = await getStoredVideoRecord('video-2');
-                            if (record && record.blob) {
-                              setUploadingVideoId('video-2');
-                              setUploadStatusMessage('Téléversement vers Supabase Storage...');
-                              const res = await uploadVideoToSupabase('video-2', record.blob);
-                              if (res.success && res.url) {
-                                handleUpdateVideoField('video-2', 'videoUrl', res.url);
-                                setUploadStatusMessage('Vidéo 2 synchronisée sur le Cloud !');
-                              } else {
-                                setVideoStorageError(res.error || 'Erreur lors de l\'envoi');
-                              }
-                              setUploadingVideoId(null);
-                            } else {
-                              video2InputRef.current?.click();
-                            }
-                          }}
-                          className="text-[10px] px-2.5 py-0.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 font-bold border border-emerald-500/40 flex items-center gap-1 transition-colors"
-                        >
-                          <RefreshCw className={`w-3 h-3 ${uploadingVideoId === 'video-2' ? 'animate-spin' : ''}`} />
-                          <span>Transférer sur le Cloud Supabase</span>
-                        </button>
-                      </>
-                    ) : (
-                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-teal-500/20 text-teal-400 font-medium flex items-center gap-1">
-                        <CheckCircle2 className="w-3 h-3" />
-                        <span>Synchronisé Smartphone & Cloud 📱</span>
-                      </span>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteVideo('video-2')}
-                      className="p-1 text-slate-500 hover:text-red-400 transition-colors"
-                      title="Supprimer cette vidéo"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-teal-500/20 text-teal-400 border border-teal-500/30 font-medium flex items-center gap-1">
+                  <CheckCircle2 className="w-3 h-3" />
+                  <span>Affichage Image HD 📸</span>
+                </span>
+              </div>
+
+              {/* Image Preview & Upload Button */}
+              <div className="flex flex-col sm:flex-row items-center gap-3 p-3 rounded-xl bg-slate-900/80 border border-slate-800">
+                <div className="w-full sm:w-36 aspect-video rounded-lg overflow-hidden bg-slate-950 border border-slate-800 relative shrink-0 shadow-inner">
+                  <img
+                    src={video2?.imageUrl || video2?.posterUrl || '/kongo_realisation_shoot.jpg'}
+                    alt="Aperçu réalisation"
+                    className="w-full h-full object-cover"
+                  />
+                  <div className="absolute inset-0 bg-black/25 flex items-center justify-center pointer-events-none">
+                    <ImageIcon className="w-4 h-4 text-white/80" />
                   </div>
-                ) : (
-                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-amber-400 border border-amber-500/30 font-medium">
-                    En attente de téléversement
-                  </span>
-                )}
+                </div>
+
+                <div className="flex-1 w-full space-y-1.5 text-center sm:text-left">
+                  <input
+                    type="file"
+                    ref={image2InputRef}
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) handleImage2FileSelect(file);
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => image2InputRef.current?.click()}
+                    className="w-full sm:w-auto px-3.5 py-2 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-sm"
+                  >
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>Choisir une image de réalisation</span>
+                  </button>
+                  <p className="text-[10px] text-slate-400">
+                    JPG, PNG ou WebP (format paysage 16:9 recommandé). S'affiche instantanément sur mobile & PC sans streaming vidéo requis.
+                  </p>
+                </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                 <div>
-                  <label className="block text-slate-400 mb-1">Titre de la vidéo</label>
+                  <label className="block text-slate-400 mb-1">Titre de la réalisation</label>
                   <input
                     type="text"
-                    value={video2?.title || ''}
+                    value={
+                      video2?.title && !video2.title.toLowerCase().includes('configurer') && !video2.title.includes('Deuxième Réalisation')
+                        ? video2.title
+                        : (video2?.title ? 'Voici une autre de nos réalisations' : '')
+                    }
                     onChange={(e) => handleUpdateVideoField('video-2', 'title', e.target.value)}
-                    placeholder="Ex: Spot Corporate Entreprise"
+                    placeholder="Voici une autre de nos réalisations"
                     className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-100 focus:outline-none focus:border-emerald-500 text-xs"
                   />
                 </div>
@@ -1034,7 +1055,7 @@ export function EditProfileModal({
                     type="text"
                     value={video2?.subtitle || ''}
                     onChange={(e) => handleUpdateVideoField('video-2', 'subtitle', e.target.value)}
-                    placeholder="Ex: Campagne d'attraction d'investisseurs"
+                    placeholder="Ex: Production de contenu haute définition & spot de marque"
                     className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-100 focus:outline-none focus:border-emerald-500 text-xs"
                   />
                 </div>
@@ -1044,7 +1065,7 @@ export function EditProfileModal({
                     type="text"
                     value={video2?.client || ''}
                     onChange={(e) => handleUpdateVideoField('video-2', 'client', e.target.value)}
-                    placeholder="Ex: Nom de l'entreprise cliente"
+                    placeholder="Ex: Kongo Digital Wave Studio"
                     className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-100 focus:outline-none focus:border-emerald-500 text-xs"
                   />
                 </div>
@@ -1054,69 +1075,35 @@ export function EditProfileModal({
                     type="text"
                     value={video2?.category || ''}
                     onChange={(e) => handleUpdateVideoField('video-2', 'category', e.target.value)}
-                    placeholder="Ex: Vidéo Corporate / Drone / Spot"
+                    placeholder="Ex: Production Audiovisuelle & Shooting 4K"
                     className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-100 focus:outline-none focus:border-emerald-500 text-xs"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-slate-400 mb-1 text-xs">Description</label>
+                <label className="block text-slate-400 mb-1 text-xs">Description de la réalisation</label>
                 <textarea
                   rows={2}
                   value={video2?.description || ''}
                   onChange={(e) => handleUpdateVideoField('video-2', 'description', e.target.value)}
-                  placeholder="Décrivez brièvement le contexte et le savoir-faire démontré dans cette réalisation..."
+                  placeholder="Décrivez les coulisses, les moyens techniques ou les retombées de cette réalisation..."
                   className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-100 focus:outline-none focus:border-emerald-500 text-xs resize-none"
                 />
               </div>
 
-              {/* Video 2 Source / Upload */}
-              <div className="pt-2 border-t border-slate-900 space-y-2">
+              <div>
+                <label className="block text-slate-500 mb-1 text-[11px]">Ou lien URL direct de l'image</label>
                 <input
-                  type="file"
-                  ref={video2InputRef}
-                  accept="video/*"
-                  className="hidden"
+                  type="text"
+                  value={video2?.imageUrl || video2?.posterUrl || ''}
                   onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) handleVideoFileSelect('video-2', file);
+                    handleUpdateVideoField('video-2', 'imageUrl', e.target.value);
+                    handleUpdateVideoField('video-2', 'posterUrl', e.target.value);
                   }}
+                  placeholder="https://... ou /kongo_realisation_shoot.jpg"
+                  className="w-full px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 focus:outline-none focus:border-emerald-500 text-[11px] font-mono"
                 />
-                <button
-                  type="button"
-                  disabled={uploadingVideoId === 'video-2'}
-                  onClick={() => video2InputRef.current?.click()}
-                  className="w-full px-4 py-3 rounded-2xl bg-gradient-to-r from-teal-500/20 to-emerald-500/20 hover:from-teal-500/30 hover:to-emerald-500/30 border border-teal-500/30 text-teal-300 text-xs font-bold flex items-center justify-center gap-2 transition-all shadow-sm"
-                >
-                  {uploadingVideoId === 'video-2' ? (
-                    <>
-                      <Loader2 className="w-4 h-4 text-teal-400 animate-spin" />
-                      <span>Téléversement vers le Cloud Supabase...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Upload className="w-4 h-4 text-teal-400" />
-                      <span>
-                        {video2?.videoUrl ? 'Remplacer la vidéo via Supabase Cloud' : 'Téléverser vers Supabase Cloud (MP4, WebM)'}
-                      </span>
-                    </>
-                  )}
-                </button>
-
-                <div>
-                  <label className="block text-slate-500 mb-1 text-[11px]">Ou URL directe / Lien externe (YouTube, Google Drive, Vimeo, MP4 public)</label>
-                  <input
-                    type="text"
-                    value={video2?.videoUrl || ''}
-                    onChange={(e) => handleUpdateVideoField('video-2', 'videoUrl', e.target.value)}
-                    placeholder="https://..."
-                    className="w-full px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 focus:outline-none focus:border-emerald-500 text-[11px] font-mono"
-                  />
-                  <p className="text-[10px] text-slate-500 mt-1">
-                    Astuce : Un lien YouTube, Vimeo, Google Drive public ou un MP4 hébergé en ligne est immédiatement lisible sur smartphone sans nécessiter de quota de stockage.
-                  </p>
-                </div>
               </div>
             </div>
           </div>

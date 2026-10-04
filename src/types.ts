@@ -9,15 +9,17 @@ export interface GpsLocation {
 }
 
 export interface ShowcaseVideo {
-  id: string; // 'video-1' | 'video-2'
+  id: string; // 'video-1' | 'video-2' | 'realisation-2'
+  type?: 'video' | 'image';
   title: string;
   subtitle?: string;
   description: string;
   client?: string;
   category: string;
   duration?: string;
-  videoUrl: string;
+  videoUrl?: string;
   posterUrl?: string;
+  imageUrl?: string;
 }
 
 export interface BusinessCardProfile {
