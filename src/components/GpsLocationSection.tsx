@@ -3,6 +3,7 @@ import { MapPin, Navigation, Compass, Copy, Check, ExternalLink, LocateFixed, Al
 import { BusinessCardProfile } from '../types';
 import { calculateDistanceKm } from '../utils/vcard';
 import { InteractiveMap } from './InteractiveMap';
+import { trackInteraction } from '../services/analyticsService';
 
 interface GpsLocationSectionProps {
   profile: BusinessCardProfile;
@@ -183,6 +184,7 @@ export function GpsLocationSection({ profile }: GpsLocationSectionProps) {
           href={profile.googleMapsShareUrl}
           target="_blank"
           rel="noopener noreferrer"
+          onClick={() => trackInteraction('map_view', 'Clic Itinéraire Google Maps', profile.googleMapsShareUrl)}
           className="flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-sm shadow-lg shadow-emerald-950/40 transition-all duration-200 hover:-translate-y-0.5"
         >
           <Navigation className="w-4 h-4" />
@@ -194,6 +196,7 @@ export function GpsLocationSection({ profile }: GpsLocationSectionProps) {
           href={`https://www.google.com/maps/dir/?api=1&destination=${profile.location.latitude},${profile.location.longitude}`}
           target="_blank"
           rel="noopener noreferrer"
+          onClick={() => trackInteraction('map_view', 'Clic Itinéraire GPS direct')}
           className="flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-100 font-semibold text-sm border border-slate-700/80 transition-all duration-200"
         >
           <Compass className="w-4 h-4 text-emerald-400" />

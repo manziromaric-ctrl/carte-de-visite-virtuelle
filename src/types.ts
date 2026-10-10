@@ -44,3 +44,49 @@ export interface BusinessCardProfile {
 }
 
 export type QrTargetType = 'card_url' | 'vcard_contact' | 'google_maps_location';
+
+export type InteractionActionType =
+  | 'page_view'
+  | 'save_contact'
+  | 'qr_view'
+  | 'phone_call'
+  | 'whatsapp_click'
+  | 'email_click'
+  | 'share_card'
+  | 'video_play'
+  | 'realisation_view'
+  | 'map_view'
+  | 'social_link'
+  | 'copy_link';
+
+export interface CardInteractionEvent {
+  id?: string;
+  sessionId: string;
+  actionType: InteractionActionType;
+  actionLabel: string;
+  timestamp: string; // ISO 8601 string
+  country: string;
+  countryCode: string;
+  flagEmoji: string;
+  city?: string;
+  device: 'mobile' | 'desktop' | 'tablet';
+  browser?: string;
+  details?: string;
+}
+
+export interface CountryStatistic {
+  country: string;
+  countryCode: string;
+  flagEmoji: string;
+  count: number;
+  uniqueUsers: number;
+  percentage: number;
+  lastActive: string;
+}
+
+export interface DailyStatistic {
+  date: string; // 'YYYY-MM-DD'
+  displayDate: string; // '10 Oct'
+  totalInteractions: number;
+  uniqueUsers: number;
+}

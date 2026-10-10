@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { BusinessCardProfile } from '../types';
 import { downloadVCard } from '../utils/vcard';
+import { trackInteraction } from '../services/analyticsService';
 
 interface ActionButtonsProps {
   profile: BusinessCardProfile;
@@ -24,11 +25,18 @@ export function ActionButtons({ profile, onOpenQr }: ActionButtonsProps) {
 
   const handleDownloadContact = () => {
     downloadVCard(profile);
+    trackInteraction('save_contact', 'Téléchargement de la fiche contact vCard', `Contact: ${profile.name}`);
     setDownloaded(true);
     setTimeout(() => setDownloaded(false), 2500);
   };
 
+  const handleQrClick = () => {
+    trackInteraction('qr_view', 'Scan / Affichage du Code QR interactif');
+    onOpenQr();
+  };
+
   const scrollToLocation = () => {
+    trackInteraction('map_view', 'Consultation itinéraire GPS Bureau Kongo Digital Wave');
     const el = document.getElementById('location-section');
     if (el) {
       el.scrollIntoView({ behavior: 'smooth' });
@@ -61,7 +69,7 @@ export function ActionButtons({ profile, onOpenQr }: ActionButtonsProps) {
         <button
           id="open-qr-code-btn"
           type="button"
-          onClick={onOpenQr}
+          onClick={handleQrClick}
           className="flex items-center justify-center gap-2 py-3.5 px-4 rounded-2xl bg-slate-900 hover:bg-slate-850 text-white font-bold text-sm border border-emerald-500/40 shadow-lg shadow-black/40 transition-all duration-200 hover:border-emerald-400 active:scale-95"
         >
           <QrCode className="w-5 h-5 text-emerald-400" />
@@ -75,6 +83,7 @@ export function ActionButtons({ profile, onOpenQr }: ActionButtonsProps) {
         <a
           id="quick-call-btn"
           href={`tel:${profile.phone.replace(/\s+/g, '')}`}
+          onClick={() => trackInteraction('phone_call', `Appel direct vers ${profile.name}`)}
           className="flex flex-col items-center justify-center gap-1.5 p-3 rounded-2xl bg-slate-900/90 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 text-slate-200 transition-all hover:scale-[1.03] active:scale-95 text-center"
           title={`Appeler ${profile.name}`}
         >
@@ -90,6 +99,7 @@ export function ActionButtons({ profile, onOpenQr }: ActionButtonsProps) {
           href={`https://wa.me/${profile.whatsapp.replace(/[^0-9]/g, '')}?text=Bonjour%20${encodeURIComponent(profile.name)}%2C%20je%20vous%20contacte%20via%20votre%20carte%20de%20visite%20digitale.`}
           target="_blank"
           rel="noopener noreferrer"
+          onClick={() => trackInteraction('whatsapp_click', `Discussion WhatsApp avec ${profile.name}`)}
           className="flex flex-col items-center justify-center gap-1.5 p-3 rounded-2xl bg-slate-900/90 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 text-slate-200 transition-all hover:scale-[1.03] active:scale-95 text-center"
           title="Discuter sur WhatsApp"
         >
@@ -103,6 +113,7 @@ export function ActionButtons({ profile, onOpenQr }: ActionButtonsProps) {
         <a
           id="quick-email-btn"
           href={`mailto:${profile.email}?subject=Prise%20de%20contact%20-%20Kongo%20Digital%20Wave`}
+          onClick={() => trackInteraction('email_click', `Envoi Email à ${profile.email}`)}
           className="flex flex-col items-center justify-center gap-1.5 p-3 rounded-2xl bg-slate-900/90 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 text-slate-200 transition-all hover:scale-[1.03] active:scale-95 text-center"
           title="Envoyer un email"
         >

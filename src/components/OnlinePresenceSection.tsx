@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { motion } from 'motion/react';
 import { Linkedin, Globe, MapPin, ExternalLink, Copy, Check, Sparkles } from 'lucide-react';
 import { BusinessCardProfile } from '../types';
+import { trackInteraction } from '../services/analyticsService';
 
 interface OnlinePresenceSectionProps {
   profile: BusinessCardProfile;
@@ -10,8 +11,9 @@ interface OnlinePresenceSectionProps {
 export function OnlinePresenceSection({ profile }: OnlinePresenceSectionProps) {
   const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
 
-  const handleCopy = (url: string) => {
+  const handleCopy = (url: string, title: string) => {
     navigator.clipboard.writeText(url);
+    trackInteraction('copy_link', `Lien copié: ${title}`, url);
     setCopiedUrl(url);
     setTimeout(() => setCopiedUrl(null), 2000);
   };
@@ -81,6 +83,7 @@ export function OnlinePresenceSection({ profile }: OnlinePresenceSectionProps) {
                 href={item.url}
                 target="_blank"
                 rel="noopener noreferrer"
+                onClick={() => trackInteraction('social_link', `Clic: ${item.title}`, item.url)}
                 className="flex items-center gap-3.5 flex-1 min-w-0"
               >
                 <motion.div 
@@ -119,7 +122,7 @@ export function OnlinePresenceSection({ profile }: OnlinePresenceSectionProps) {
                   transition={{ type: 'spring', stiffness: 400, damping: 17 }}
                   onClick={(e) => {
                     e.stopPropagation();
-                    handleCopy(item.url);
+                    handleCopy(item.url, item.title);
                   }}
                   title="Copier le lien"
                   className="w-8 h-8 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition-colors shadow-sm"

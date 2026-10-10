@@ -26,12 +26,40 @@
         "updatedAt": { "type": "string" }
       },
       "required": ["name", "title", "company", "phone", "email"]
+    },
+    "CardInteraction": {
+      "title": "CardInteraction",
+      "description": "Événement d'interaction en temps réel sur la carte de visite (vue, appel, whatsapp, vcard, partage, vidéo, etc.) avec géolocalisation de l'utilisateur.",
+      "type": "object",
+      "properties": {
+        "sessionId": { "type": "string" },
+        "actionType": { "type": "string" },
+        "actionLabel": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "country": { "type": "string" },
+        "countryCode": { "type": "string" },
+        "flagEmoji": { "type": "string" },
+        "city": { "type": "string" },
+        "device": { "type": "string" },
+        "browser": { "type": "string" },
+        "referrer": { "type": "string" },
+        "targetUrl": { "type": "string" }
+      },
+      "required": ["actionType", "timestamp"]
     }
   },
   "firestore": {
     "/profiles/{profileId}": {
       "schema": "BusinessCardProfile",
       "description": "Profil de la carte de visite numérique Kongo Digital Wave."
+    },
+    "/card_interactions/{interactionId}": {
+      "schema": "CardInteraction",
+      "description": "Flux en temps réel des interactions des utilisateurs avec pays et horodatage."
+    },
+    "/analytics_summary/{summaryId}": {
+      "schema": "CardInteraction",
+      "description": "Agrégats et métriques globales des interactions et visiteurs."
     }
   }
 }

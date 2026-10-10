@@ -14,7 +14,9 @@ import {
   ShieldCheck, 
   Send, 
   Eye,
-  Lock
+  Lock,
+  BarChart3,
+  Activity
 } from 'lucide-react';
 import { BusinessCardProfile, ShowcaseVideo } from './types';
 import { DEFAULT_PROFILE } from './data/defaultProfile';
@@ -26,6 +28,7 @@ import { AboutSection } from './components/AboutSection';
 import { VideoShowcaseSection } from './components/VideoShowcaseSection';
 import { VideoPlayerModal } from './components/VideoPlayerModal';
 import { RealisationImageModal } from './components/RealisationImageModal';
+import { AnalyticsDashboard } from './components/AnalyticsDashboard';
 import { QrCodeModal } from './components/QrCodeModal';
 import { EditProfileModal } from './components/EditProfileModal';
 import { PasswordModal } from './components/PasswordModal';
@@ -35,6 +38,7 @@ import { downloadVCard } from './utils/vcard';
 import { getDigitalCardUrl } from './utils/cardUrl';
 import { getStoredVideoUrl, getStoredVideoRecord } from './utils/videoStorage';
 import { uploadVideoToSupabase } from './utils/supabaseStorage';
+import { trackInteraction } from './services/analyticsService';
 import {
   subscribeToProfileChanges,
   saveProfileToCloud,
@@ -129,6 +133,37 @@ export default function App() {
   const [copiedLink, setCopiedLink] = useState(false);
   const [activeTab, setActiveTab] = useState<'all' | 'videos' | 'links' | 'gps' | 'about'>('all');
   const [cardUrlVersion, setCardUrlVersion] = useState(0);
+
+  // Connected Analytics & Real-Time Tracking Page view mode
+  const [viewMode, setViewMode] = useState<'card' | 'analytics'>(() => {
+    if (typeof window !== 'undefined') {
+      const hash = window.location.hash.toLowerCase();
+      const search = window.location.search.toLowerCase();
+      if (hash.includes('analytics') || search.includes('analytics') || search.includes('dashboard')) {
+        return 'analytics';
+      }
+    }
+    return 'card';
+  });
+
+  // Listen to hash changes for browser back/forward and direct links (#analytics / #card)
+  useEffect(() => {
+    const handleHash = () => {
+      const hash = window.location.hash.toLowerCase();
+      if (hash.includes('analytics')) {
+        setViewMode('analytics');
+      } else {
+        setViewMode('card');
+      }
+    };
+    window.addEventListener('hashchange', handleHash);
+    return () => window.removeEventListener('hashchange', handleHash);
+  }, []);
+
+  // Track page visit on mount
+  useEffect(() => {
+    trackInteraction('page_view', 'Consultation de la carte de visite', 'Arrivée sur la carte digitale');
+  }, []);
 
   // Video & Image Realisation Modal State
   const [selectedVideo, setSelectedVideo] = useState<ShowcaseVideo | null>(null);
@@ -386,9 +421,24 @@ export default function App() {
   const handleCopyCardUrl = () => {
     const cardUrl = getDigitalCardUrl();
     navigator.clipboard.writeText(cardUrl);
+    trackInteraction('share_card', 'Partage du lien de la carte', 'Lien copié dans le presse-papier');
     setCopiedLink(true);
     setTimeout(() => setCopiedLink(false), 2500);
   };
+
+  // Dedicated Real-time Analytics & Interaction Dashboard View
+  if (viewMode === 'analytics') {
+    return (
+      <AnalyticsDashboard
+        onBackToCard={() => {
+          window.location.hash = '';
+          setViewMode('card');
+        }}
+        cardCompanyName={profile.company}
+        cardOwnerName={profile.name}
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-emerald-500 selection:text-slate-950 pb-20">
@@ -431,16 +481,36 @@ export default function App() {
               <span className="text-[10px] text-emerald-400 font-medium hidden xs:inline">En direct</span>
             </div>
 
-            {/* View Counter Badge */}
-            <div
+            {/* View Counter Badge (Clickable to open Analytics Dashboard) */}
+            <button
               id="card-view-counter-header"
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-slate-900/90 border border-slate-800 text-slate-300 text-xs shadow-sm"
-              title={`Cette carte digitale a été consultée ${viewCount} fois`}
+              type="button"
+              onClick={() => {
+                window.location.hash = 'analytics';
+                setViewMode('analytics');
+              }}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-slate-900/90 hover:bg-slate-850 border border-slate-800 hover:border-slate-700 text-slate-300 text-xs shadow-sm transition-all cursor-pointer group"
+              title={`Cette carte digitale a été consultée ${viewCount} fois. Cliquez pour ouvrir les analytics.`}
             >
-              <Eye className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+              <Eye className="w-3.5 h-3.5 text-emerald-400 shrink-0 group-hover:scale-110 transition-transform" />
               <span className="font-bold text-white tracking-tight">{viewCount.toLocaleString('fr-FR')}</span>
               <span className="text-[10px] text-slate-400 hidden xs:inline">{viewCount > 1 ? 'vues' : 'vue'}</span>
-            </div>
+            </button>
+
+            {/* Direct Analytics Dashboard Switcher Button */}
+            <button
+              id="open-analytics-header-btn"
+              type="button"
+              onClick={() => {
+                window.location.hash = 'analytics';
+                setViewMode('analytics');
+              }}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-850 border border-emerald-500/30 hover:border-emerald-500/60 text-slate-300 hover:text-white transition-all text-xs shadow-sm group"
+              title="Ouvrir le tableau de bord d'analytics et interactions en temps réel"
+            >
+              <BarChart3 className="w-3.5 h-3.5 text-emerald-400 group-hover:scale-110 transition-transform" />
+              <span className="text-[11px] font-bold text-emerald-400 hidden xs:inline">Stats</span>
+            </button>
 
             <button
               id="share-header-btn"
@@ -584,6 +654,19 @@ export default function App() {
           >
             Profil
           </button>
+          <button
+            type="button"
+            onClick={() => {
+              window.location.hash = 'analytics';
+              setViewMode('analytics');
+            }}
+            className="flex-1 min-w-[70px] py-2 px-2 rounded-xl font-semibold transition-all text-center text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 flex items-center justify-center gap-1"
+            title="Ouvrir le tableau de bord des interactions en temps réel"
+          >
+            <BarChart3 className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Stats</span>
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+          </button>
         </div>
 
         {/* ================= CONTENT SECTIONS BASED ON TAB ================= */}
@@ -594,10 +677,12 @@ export default function App() {
               onPlayVideo={(v) => {
                 setSelectedVideo(v);
                 setIsVideoModalOpen(true);
+                trackInteraction('video_play', `Lecture vidéo: ${v.title}`, v.client || 'Spot Kongo Digital Wave');
               }}
               onViewImage={(imgItem) => {
                 setSelectedImageMedia(imgItem);
                 setIsImageModalOpen(true);
+                trackInteraction('realisation_view', `Affichage réalisation HD: ${imgItem.title}`, imgItem.client || 'Shooting HD');
               }}
               onOpenAdmin={handleOpenEdit}
             />
@@ -622,8 +707,43 @@ export default function App() {
           </section>
         )}
 
+        {/* ================= CONNECTED REAL-TIME ANALYTICS BANNER ================= */}
+        <div className="pt-2">
+          <button
+            type="button"
+            id="footer-open-analytics-btn"
+            onClick={() => {
+              window.location.hash = 'analytics';
+              setViewMode('analytics');
+            }}
+            className="w-full p-4 rounded-3xl bg-gradient-to-r from-slate-900 via-slate-900 to-slate-850 hover:to-slate-800 border border-emerald-500/30 hover:border-emerald-500/60 transition-all text-xs font-semibold flex items-center justify-between shadow-xl group cursor-pointer"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 flex items-center justify-center shrink-0 shadow-sm group-hover:scale-105 transition-transform">
+                <BarChart3 className="w-5 h-5" />
+              </div>
+              <div className="text-left">
+                <div className="font-extrabold text-sm text-white group-hover:text-emerald-300 transition-colors flex items-center gap-2">
+                  <span>Tableau de Bord & Analytics en Direct</span>
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                  </span>
+                </div>
+                <div className="text-[11px] text-slate-400 mt-0.5">
+                  Suivi en temps réel des utilisateurs, pays d'origines (RDC, France...) et dates
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/20 text-emerald-400 font-bold text-xs group-hover:bg-emerald-500 group-hover:text-slate-950 transition-all">
+              <span>Voir en Direct</span>
+              <span>→</span>
+            </div>
+          </button>
+        </div>
+
         {/* Quick NFC / Direct Access Footer info */}
-        <footer className="pt-6 border-t border-slate-900 text-center space-y-3">
+        <footer className="pt-4 border-t border-slate-900 text-center space-y-3">
           <div className="flex justify-center">
             <KongoLogo variant="badge" size="md" src={profile.logoUrl} />
           </div>

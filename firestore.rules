@@ -8,6 +8,16 @@ service cloud.firestore {
       allow write: if true;
     }
 
+    // Analytics et interactions en temps réel pour mesurer les utilisateurs et pays
+    match /card_interactions/{interactionId} {
+      allow read, create: if true;
+      allow update, delete: if true;
+    }
+
+    match /analytics_summary/{summaryId} {
+      allow read, write: if true;
+    }
+
     // Document de test pour validation de connexion
     match /test/{docId} {
       allow read, write: if true;
