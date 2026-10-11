@@ -12,7 +12,10 @@ import {
   CardInteractionEvent, 
   InteractionActionType, 
   CountryStatistic, 
-  DailyStatistic 
+  DailyStatistic,
+  HourlyStatistic,
+  ActionStatistic,
+  FunnelStep
 } from '../types';
 
 const GEO_CACHE_KEY = 'kongo_cached_geo_data_v1';
@@ -402,6 +405,8 @@ export function computeAnalyticsSummary(events: CardInteractionEvent[]) {
   };
 
   const dailyBuckets: Record<string, { total: number; users: Set<string> }> = {};
+  const thirtyDayBuckets: Record<string, { total: number; users: Set<string> }> = {};
+  const hourlyBuckets: Record<number, { total: number; users: Set<string> }> = {};
 
   // Initialize last 7 days buckets
   for (let i = 6; i >= 0; i--) {
@@ -411,10 +416,24 @@ export function computeAnalyticsSummary(events: CardInteractionEvent[]) {
     dailyBuckets[key] = { total: 0, users: new Set() };
   }
 
+  // Initialize last 30 days buckets
+  for (let i = 29; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const key = d.toISOString().slice(0, 10);
+    thirtyDayBuckets[key] = { total: 0, users: new Set() };
+  }
+
+  // Initialize 24 hourly buckets
+  for (let h = 0; h < 24; h++) {
+    hourlyBuckets[h] = { total: 0, users: new Set() };
+  }
+
   events.forEach((ev) => {
     uniqueUsersSet.add(ev.sessionId);
 
-    const evTime = new Date(ev.timestamp).getTime();
+    const evDate = new Date(ev.timestamp);
+    const evTime = evDate.getTime();
     if (evTime >= fifteenMinutesAgo) {
       activeNowSet.add(ev.sessionId);
     }
@@ -427,6 +446,18 @@ export function computeAnalyticsSummary(events: CardInteractionEvent[]) {
     if (dailyBuckets[evDateStr]) {
       dailyBuckets[evDateStr].total++;
       dailyBuckets[evDateStr].users.add(ev.sessionId);
+    }
+
+    if (thirtyDayBuckets[evDateStr]) {
+      thirtyDayBuckets[evDateStr].total++;
+      thirtyDayBuckets[evDateStr].users.add(ev.sessionId);
+    }
+
+    // Hourly bucket
+    const hour = !isNaN(evDate.getHours()) ? evDate.getHours() : 12;
+    if (hourlyBuckets[hour]) {
+      hourlyBuckets[hour].total++;
+      hourlyBuckets[hour].users.add(ev.sessionId);
     }
 
     // Country stats
@@ -479,6 +510,140 @@ export function computeAnalyticsSummary(events: CardInteractionEvent[]) {
     };
   });
 
+  const thirtyDayStats: DailyStatistic[] = Object.entries(thirtyDayBuckets).map(([date, dData]) => {
+    const dObj = new Date(date);
+    const displayDate = dObj.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
+    return {
+      date,
+      displayDate,
+      totalInteractions: dData.total,
+      uniqueUsers: dData.users.size,
+    };
+  });
+
+  const hourlyStats: HourlyStatistic[] = Object.entries(hourlyBuckets).map(([hStr, hData]) => {
+    const h = parseInt(hStr, 10);
+    return {
+      hour: h,
+      label: `${h}h`,
+      totalInteractions: hData.total,
+      uniqueUsers: hData.users.size,
+    };
+  });
+
+  // Determine peak hour
+  let peakHour = 14;
+  let peakHourMax = 0;
+  hourlyStats.forEach((hs) => {
+    if (hs.totalInteractions > peakHourMax) {
+      peakHourMax = hs.totalInteractions;
+      peakHour = hs.hour;
+    }
+  });
+
+  // Action distribution for donut/bar charts
+  const actionDistribution: ActionStatistic[] = [
+    {
+      actionType: 'whatsapp_click' as InteractionActionType,
+      label: 'WhatsApp Direct',
+      count: actionCounts.whatsapp_click,
+      percentage: totalInteractions > 0 ? Math.round((actionCounts.whatsapp_click / totalInteractions) * 100) : 0,
+      color: '#22c55e', // green-500
+    },
+    {
+      actionType: 'phone_call' as InteractionActionType,
+      label: 'Appels Téléphone',
+      count: actionCounts.phone_call,
+      percentage: totalInteractions > 0 ? Math.round((actionCounts.phone_call / totalInteractions) * 100) : 0,
+      color: '#10b981', // emerald-500
+    },
+    {
+      actionType: 'save_contact' as InteractionActionType,
+      label: 'Enregistrement vCard',
+      count: actionCounts.save_contact,
+      percentage: totalInteractions > 0 ? Math.round((actionCounts.save_contact / totalInteractions) * 100) : 0,
+      color: '#f59e0b', // amber-500
+    },
+    {
+      actionType: 'video_play' as InteractionActionType,
+      label: 'Lectures Vidéo Spot',
+      count: actionCounts.video_play,
+      percentage: totalInteractions > 0 ? Math.round((actionCounts.video_play / totalInteractions) * 100) : 0,
+      color: '#a855f7', // purple-500
+    },
+    {
+      actionType: 'realisation_view' as InteractionActionType,
+      label: 'Shootings & Photos HD',
+      count: actionCounts.realisation_view,
+      percentage: totalInteractions > 0 ? Math.round((actionCounts.realisation_view / totalInteractions) * 100) : 0,
+      color: '#14b8a6', // teal-500
+    },
+    {
+      actionType: 'map_view' as InteractionActionType,
+      label: 'Itinéraire & GPS',
+      count: actionCounts.map_view,
+      percentage: totalInteractions > 0 ? Math.round((actionCounts.map_view / totalInteractions) * 100) : 0,
+      color: '#3b82f6', // blue-500
+    },
+    {
+      actionType: 'qr_view' as InteractionActionType,
+      label: 'Affichage Code QR',
+      count: actionCounts.qr_view,
+      percentage: totalInteractions > 0 ? Math.round((actionCounts.qr_view / totalInteractions) * 100) : 0,
+      color: '#6366f1', // indigo-500
+    },
+    {
+      actionType: 'share_card' as InteractionActionType,
+      label: 'Partages & Copies Lien',
+      count: actionCounts.share_card + actionCounts.copy_link,
+      percentage: totalInteractions > 0 ? Math.round(((actionCounts.share_card + actionCounts.copy_link) / totalInteractions) * 100) : 0,
+      color: '#06b6d4', // cyan-500
+    },
+    {
+      actionType: 'social_link' as InteractionActionType,
+      label: 'Liens Pro / Site Web',
+      count: actionCounts.social_link,
+      percentage: totalInteractions > 0 ? Math.round((actionCounts.social_link / totalInteractions) * 100) : 0,
+      color: '#0284c7', // sky-600
+    },
+    {
+      actionType: 'page_view' as InteractionActionType,
+      label: 'Visites de la Carte',
+      count: actionCounts.page_view,
+      percentage: totalInteractions > 0 ? Math.round((actionCounts.page_view / totalInteractions) * 100) : 0,
+      color: '#64748b', // slate-500
+    },
+  ].filter((a) => a.count > 0 || a.actionType === 'whatsapp_click' || a.actionType === 'phone_call' || a.actionType === 'save_contact');
+
+  // Conversion Funnel
+  const directContactsCount = actionCounts.whatsapp_click + actionCounts.phone_call + actionCounts.save_contact;
+  const contentEngageCount = actionCounts.video_play + actionCounts.realisation_view + actionCounts.map_view + actionCounts.qr_view;
+  const totalVisitorsCount = Math.max(uniqueUsersSet.size, 1);
+
+  const funnelStats: FunnelStep[] = [
+    {
+      name: '1. Visite de la Carte',
+      count: totalVisitorsCount,
+      percentage: 100,
+      color: '#06b6d4',
+      desc: 'Prospects et contacts ayant ouvert la carte digitale',
+    },
+    {
+      name: '2. Exploration des Réalisations',
+      count: contentEngageCount,
+      percentage: totalVisitorsCount > 0 ? Math.min(Math.round((contentEngageCount / totalVisitorsCount) * 100), 100) : 0,
+      color: '#a855f7',
+      desc: 'Visionnage des vidéos, portfolios et localisation GPS',
+    },
+    {
+      name: '3. Prise de Contact Directe (Conversion)',
+      count: directContactsCount,
+      percentage: totalVisitorsCount > 0 ? Math.min(Math.round((directContactsCount / totalVisitorsCount) * 100), 100) : 0,
+      color: '#10b981',
+      desc: 'Messages WhatsApp, appels directs et enregistrement vCard',
+    },
+  ];
+
   return {
     totalInteractions,
     uniqueUsers: uniqueUsersSet.size,
@@ -488,6 +653,11 @@ export function computeAnalyticsSummary(events: CardInteractionEvent[]) {
     actionCounts,
     deviceCounts,
     dailyStats,
+    thirtyDayStats,
+    hourlyStats,
+    peakHour,
+    actionDistribution,
+    funnelStats,
   };
 }
 

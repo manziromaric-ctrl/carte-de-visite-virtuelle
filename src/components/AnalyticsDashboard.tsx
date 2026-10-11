@@ -29,7 +29,8 @@ import {
   ChevronRight,
   TrendingUp,
   BarChart3,
-  Layers
+  Layers,
+  PieChart as PieChartIcon
 } from 'lucide-react';
 import { 
   CardInteractionEvent, 
@@ -43,6 +44,7 @@ import {
   trackInteraction 
 } from '../services/analyticsService';
 import { KongoLogo } from './KongoLogo';
+import { InteractiveChartsSection } from './InteractiveChartsSection';
 
 interface AnalyticsDashboardProps {
   onBackToCard: () => void;
@@ -57,7 +59,7 @@ export function AnalyticsDashboard({
 }: AnalyticsDashboardProps) {
   const [events, setEvents] = useState<CardInteractionEvent[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'stream' | 'countries' | 'actions' | 'trends'>('stream');
+  const [activeTab, setActiveTab] = useState<'charts' | 'stream' | 'countries' | 'actions' | 'trends'>('charts');
   const [selectedCountryFilter, setSelectedCountryFilter] = useState<string>('all');
   const [selectedActionFilter, setSelectedActionFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -434,60 +436,122 @@ export function AnalyticsDashboard({
         <div className="flex items-center gap-1.5 p-1 rounded-2xl bg-slate-900/90 border border-slate-800 overflow-x-auto no-scrollbar">
           <button
             type="button"
+            onClick={() => setActiveTab('charts')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-extrabold transition-all shrink-0 ${
+              activeTab === 'charts'
+                ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/25 ring-1 ring-emerald-400'
+                : 'text-emerald-400 hover:text-emerald-300 hover:bg-slate-800/60'
+            }`}
+          >
+            <BarChart3 className="w-4 h-4" />
+            <span>Graphiques & Statistiques</span>
+            <span className={`px-1.5 py-0.2 rounded-full text-[9px] font-black ${
+              activeTab === 'charts'
+                ? 'bg-slate-950/20 text-slate-950'
+                : 'bg-emerald-500/20 text-emerald-400'
+            }`}>
+              Complet
+            </span>
+          </button>
+
+          <button
+            type="button"
             onClick={() => setActiveTab('stream')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all shrink-0 ${
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all shrink-0 ${
               activeTab === 'stream'
                 ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20'
                 : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
             }`}
           >
             <Radio className="w-3.5 h-3.5" />
-            <span>Flux en Temps Réel ({filteredEvents.length})</span>
+            <span>Flux en Direct ({filteredEvents.length})</span>
           </button>
 
           <button
             type="button"
             onClick={() => setActiveTab('countries')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all shrink-0 ${
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all shrink-0 ${
               activeTab === 'countries'
                 ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20'
                 : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
             }`}
           >
             <Globe className="w-3.5 h-3.5" />
-            <span>Pays d'Origine ({summary.countriesList.length})</span>
+            <span>Pays ({summary.countriesList.length})</span>
           </button>
 
           <button
             type="button"
             onClick={() => setActiveTab('actions')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all shrink-0 ${
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all shrink-0 ${
               activeTab === 'actions'
                 ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20'
                 : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
             }`}
           >
             <Layers className="w-3.5 h-3.5" />
-            <span>Types d'Interactions</span>
+            <span>Types d'Actions</span>
           </button>
 
           <button
             type="button"
             onClick={() => setActiveTab('trends')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all shrink-0 ${
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all shrink-0 ${
               activeTab === 'trends'
                 ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20'
                 : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
             }`}
           >
-            <BarChart3 className="w-3.5 h-3.5" />
+            <TrendingUp className="w-3.5 h-3.5" />
             <span>Évolution 7 Jours</span>
           </button>
         </div>
 
+        {/* TAB 0: GRAPHIQUES VISUELS COMPLETS */}
+        {activeTab === 'charts' && (
+          <InteractiveChartsSection
+            dailyStats={summary.dailyStats}
+            thirtyDayStats={summary.thirtyDayStats}
+            hourlyStats={summary.hourlyStats}
+            actionDistribution={summary.actionDistribution}
+            countriesList={summary.countriesList}
+            funnelStats={summary.funnelStats}
+            deviceCounts={summary.deviceCounts}
+            totalInteractions={summary.totalInteractions}
+            uniqueUsers={summary.uniqueUsers}
+            peakHour={summary.peakHour}
+          />
+        )}
+
         {/* TAB 1: FLUX EN TEMPS RÉEL (LIVE STREAM) */}
         {activeTab === 'stream' && (
           <div className="space-y-4">
+            
+            {/* Quick Chart Glance Banner */}
+            <div className="p-4 rounded-2xl bg-gradient-to-r from-emerald-950/40 via-slate-900 to-teal-950/30 border border-emerald-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-lg">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
+                  <BarChart3 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
+                    <span>Analyses Visuelles & Graphiques Interactifs</span>
+                    <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-400">Nouveau</span>
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    Courbe Bézier 24h/7j/30j, diagramme circulaire des canaux, cartes pays et entonnoir de conversion.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActiveTab('charts')}
+                className="px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs flex items-center gap-1.5 self-start sm:self-auto shrink-0 shadow-md transition-all"
+              >
+                <span>Ouvrir les Graphiques</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
             
             {/* Filter & Search Bar */}
             <div className="flex flex-col sm:flex-row gap-2.5">

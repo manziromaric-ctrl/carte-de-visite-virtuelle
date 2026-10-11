@@ -90,3 +90,26 @@ export interface DailyStatistic {
   totalInteractions: number;
   uniqueUsers: number;
 }
+
+export interface HourlyStatistic {
+  hour: number; // 0..23
+  label: string; // '14h'
+  totalInteractions: number;
+  uniqueUsers: number;
+}
+
+export interface ActionStatistic {
+  actionType: InteractionActionType;
+  label: string;
+  count: number;
+  percentage: number;
+  color: string;
+}
+
+export interface FunnelStep {
+  name: string;
+  count: number;
+  percentage: number;
+  color: string;
+  desc: string;
+}
